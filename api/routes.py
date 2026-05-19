@@ -35,7 +35,7 @@ def recent_trades(
 
         timestamp = trade.get("trade_time")
         dt = datetime.fromtimestamp(float(timestamp) / 1000.0, tz=timezone.utc)
-        trade["trade_time"] = dt.isoformat()
+        trade["trade_time_iso"] = dt.isoformat()
 
     emit_recent_trades(trades)
 
