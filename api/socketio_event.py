@@ -7,11 +7,9 @@ socketio_manager = socketio.RedisManager(
 )
 
 
-def emit_test_event():
+def emit_recent_trades(trades: list):
     payload = {
-        "kind": "test",
-        "message": "route /test triggered",
-        "symbol": "BTCUSDT",
+        "recent_trades": trades,
     }
-    socketio_manager.emit("test", payload)
+    socketio_manager.emit("recent_trades", payload)
     return payload
