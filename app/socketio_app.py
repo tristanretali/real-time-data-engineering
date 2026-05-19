@@ -3,7 +3,7 @@ import os
 import socketio
 
 from .health_bus import emit_service_health
-
+from api.socketio_event import get_recent_trades_snapshot
 
 socketio_message_queue = socketio.AsyncRedisManager(
     os.getenv("SOCKETIO_REDIS_URL", "redis://redis:6379/2")
@@ -24,6 +24,10 @@ async def connect(sid, environ):
     except Exception:
         pass
     await sio.emit("server_ready", {"message": "Socket.IO connected"}, to=sid)
+
+    snapshot = get_recent_trades_snapshot()
+    if snapshot:
+        await sio.emit("recent_trades", snapshot, to=sid)
 
 
 @sio.event

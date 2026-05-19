@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Query
 from datetime import datetime, timezone
 
-from .socketio_event import emit_recent_trades
+from .socketio_event import emit_recent_trades, save_recent_trades_snapshot
 from .database import trades_collection
 
 router = APIRouter()
@@ -37,6 +37,7 @@ def recent_trades(
         dt = datetime.fromtimestamp(float(timestamp) / 1000.0, tz=timezone.utc)
         trade["trade_time_iso"] = dt.isoformat()
 
+    save_recent_trades_snapshot(trades)
     emit_recent_trades(trades)
 
     return {"recent_trades": trades}

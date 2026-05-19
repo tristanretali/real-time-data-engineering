@@ -237,6 +237,11 @@ services:
     build: .
     volumes:
       - .:/app
+
+    environment:
+      SOCKETIO_REDIS_URL: redis://redis:6379/2
+      RECENT_TRADES_SNAPSHOT_TTL: 120
+
     command: uvicorn api.main:app --host 0.0.0.0 --port 8080 --reload
     ports:
       - "8080:8080"
