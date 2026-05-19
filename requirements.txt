@@ -1,0 +1,6 @@
+celery==5.4.0
+redis==5.0.8
+kafka-python==2.0.2
+python-socketio[asgi]==5.11.2
+uvicorn[standard]==0.30.6
+websockets==12.0

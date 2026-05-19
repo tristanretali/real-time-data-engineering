@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTC Orchestration Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div>
+        <div class="eyebrow">Orchestration health</div>
+        <h1>Pipeline control room</h1>
+        <p class="muted">Monitoring the health of Kafka, Redis, Socket.IO, Binance stream and Celery workers.</p>
+      </div>
+
+      <div class="status-card">
+        <div class="status-label">Dashboard connection</div>
+        <div id="socket-status" class="status-value offline">Disconnected</div>
+        <div id="socket-meta" class="status-meta">Waiting for Socket.IO</div>
+      </div>
+
+      <div class="status-card">
+        <div class="status-label">Orchestration summary</div>
+        <div id="summary-status" class="status-value warn">No snapshot</div>
+        <div id="summary-meta" class="status-meta">Waiting for the monitor</div>
+      </div>
+
+      <div class="status-card compact">
+        <div class="status-label">Update cadence</div>
+        <div class="status-value">5s</div>
+        <div class="status-meta">Monitor refresh interval</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">Pipeline overview</div>
+          <h2 id="healthy-count">--</h2>
+          <p id="price-meta" class="muted">Healthy services shown in real time.</p>
+        </div>
+
+        <div class="hero-grid">
+          <div class="metric">
+            <span>Healthy</span>
+            <strong id="healthy-total">--</strong>
+            <small>services up</small>
+          </div>
+          <div class="metric">
+            <span>Degraded</span>
+            <strong id="degraded-total">--</strong>
+            <small>needs attention</small>
+          </div>
+          <div class="metric">
+            <span>Down</span>
+            <strong id="down-total">--</strong>
+            <small>not responding</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel large">
+          <div class="panel-header">
+            <h3>Service states</h3>
+            <span class="chip" id="service-count-chip">0</span>
+          </div>
+          <div class="service-grid" id="service-grid"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h3>Health feed</h3>
+            <span class="chip">live</span>
+          </div>
+          <div class="event-list" id="event-feed"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
