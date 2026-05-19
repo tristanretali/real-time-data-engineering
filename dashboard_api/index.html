@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Market Monitor</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="dashboard">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">⌁</span>
+        <h1>Crypto Market Monitor — Real-Time Pipeline</h1>
+      </div>
+
+      <div class="sources">
+        <span class="source source-binance">Binance</span>
+        <span class="source source-coinbase">Coinbase</span>
+        <span class="live-dot"></span>
+        <strong>LIVE</strong>
+      </div>
+    </header>
+
+    <section class="ticker" aria-label="Market ticker">
+      <div><span>BTC/USDT</span> <strong class="positive">$67,284.50 ▲ 1.24%</strong></div>
+      <i></i>
+      <div><span>ETH/USDT</span> <strong class="positive">$3,521.88 ▲ 0.87%</strong></div>
+      <i></i>
+      <div><span>BTC-USD (Coinbase)</span> <strong class="negative">$67,271.00</strong> <span>— 0.03% spread</span></div>
+      <i></i>
+    </section>
+
+    <section class="kpis">
+      <article class="card kpi">
+        <span>BTC/USDT — Prix actuel</span>
+        <strong id="btc-price">$67,284</strong>
+        <small class="positive">▲ +1.24% <em>vs 1h</em></small>
+      </article>
+
+      <article class="card kpi">
+        <span>Vol glissant 5 min</span>
+        <strong>$8.4M</strong>
+        <small>~1240 trades</small>
+      </article>
+
+      <article class="card kpi">
+        <span>Trades / seconde</span>
+        <strong id="trades-sec">38.2</strong>
+        <small class="positive">Binance + Coinbase</small>
+      </article>
+
+      <article class="card kpi">
+        <span>Anomalies détectées</span>
+        <strong class="warning">4</strong>
+        <small class="warning">⚠ dernières 10 min</small>
+      </article>
+    </section>
+
+    <section class="layout">
+      <article class="card chart-card">
+        <div class="card-title">
+          <h2>⌁ Prix BTC/USDT — Fenêtre glissante 30 min</h2>
+          <strong>Moy. mobile ×2</strong>
+        </div>
+
+        <div class="chart">
+          <svg viewBox="0 0 760 330" role="img" aria-label="Courbe du prix BTC">
+            <defs>
+              <linearGradient id="priceGlow" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#5e95ff" stop-opacity="0.22" />
+                <stop offset="100%" stop-color="#5e95ff" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+
+            <path class="area" d="M48 202 L92 186 L128 180 L166 194 L202 168 L245 150 L288 160 L335 142 L374 134 L414 145 L458 126 L500 116 L540 132 L584 112 L630 96 L676 102 L714 88 L714 266 L48 266 Z" />
+            <path class="grid-line" d="M48 88 H714 M48 148 H714 M48 208 H714 M48 266 H714" />
+            <path class="avg-line" d="M48 204 L92 190 L128 187 L166 178 L202 166 L245 158 L288 148 L335 142 L374 138 L414 136 L458 132 L500 126 L540 122 L584 116 L630 110 L676 106 L714 98" />
+            <path class="price-line" d="M48 202 L92 186 L128 180 L166 194 L202 168 L245 150 L288 160 L335 142 L374 134 L414 145 L458 126 L500 116 L540 132 L584 112 L630 96 L676 102 L714 88" />
+
+            <circle class="point anomaly" cx="584" cy="112" r="6" />
+            <text class="anomaly-label" x="596" y="106">anomalie</text>
+            <circle class="point last" cx="714" cy="88" r="5" />
+            <text class="axis-label" x="722" y="91">67.4k</text>
+            <text class="axis-label" x="722" y="151">67.2k</text>
+            <text class="axis-label" x="722" y="211">67.0k</text>
+          </svg>
+        </div>
+
+        <div class="legend">
+          <span><i class="line-blue"></i>Prix BTC</span>
+          <span><i class="line-gold"></i>Moy. mobile</span>
+          <span><i class="dot-red"></i>Trade anormal</span>
+        </div>
+      </article>
+
+      <aside class="card recent-card">
+        <div class="card-title">
+          <h2>⌁ Trades récents</h2>
+          <span>live feed</span>
+        </div>
+
+        <div class="trades" id="trade-feed"></div>
+      </aside>
+    </section>
+
+    <section class="bottom-grid">
+      <article class="card">
+        <div class="card-title">
+          <h2>⚡ Alertes temps réel</h2>
+        </div>
+
+        <div class="alerts">
+          <div><i class="red"></i><strong>Volume anormal détecté</strong><span>18.5 BTC en 1 trade — seuil ×3σ</span></div>
+          <div><i class="gold"></i><strong>Variation de prix rapide</strong><span>−0.28% en 8 secondes</span></div>
+          <div><i class="gold"></i><strong>Spread Binance/Coinbase</strong><span>Écart &gt; $12 détecté</span></div>
+          <div><i class="blue"></i><strong>Pic de volume — ETH</strong><span>Vol. 5 min ×2.1 vs moy.</span></div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-title">
+          <h2>▥ Volume par fenêtre (BTC)</h2>
+        </div>
+
+        <div class="volume-list">
+          <div><span>1 min</span><b style="--w: 72%"></b><strong>$1.2M</strong></div>
+          <div><span>5 min</span><b style="--w: 100%"></b><strong>$8.4M</strong></div>
+          <div><span>15 min</span><b style="--w: 86%"></b><strong>$21.3M</strong></div>
+          <div><span>1h</span><b style="--w: 58%"></b><strong>$64.8M</strong></div>
+          <div><span>ETH 5m</span><b class="eth" style="--w: 42%"></b><strong>$3.1M</strong></div>
+        </div>
+
+        <div class="mini-legend">
+          <span><i class="blue"></i>BTC</span>
+          <span><i class="green"></i>ETH</span>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-title">
+          <h2>▤ Pipeline — Santé système</h2>
+        </div>
+
+        <div class="health">
+          <div><span>WebSocket Binance</span><strong class="positive">● connecté</strong></div>
+          <div><span>WebSocket Coinbase</span><strong class="positive">● connecté</strong></div>
+          <div><span>Kafka broker</span><strong class="positive">● actif · lag 2ms</strong></div>
+          <div><span>Consumer group</span><strong class="positive">3 / 3 actifs</strong></div>
+          <div><span>Base de données</span><strong class="positive">● MongoDB</strong></div>
+          <div><span>Débit ingestion</span><strong>~420 msg/s</strong></div>
+          <div><span>Latence pipeline</span><strong class="warning">⚠ 48ms (p99)</strong></div>
+        </div>
+      </article>
+    </section>
+
+    <footer>
+      Kafka topic: <strong>crypto.trades.raw</strong> · 3 partitions · retention 24h
+      Dernière mise à jour : <strong id="updated-at">--:--:-- UTC</strong>
+      Node.js · WebSocket · Kafka · MongoDB · Chart.js
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
