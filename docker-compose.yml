@@ -1,124 +1,274 @@
 services:
- 
-
-  kafka:
-    image: confluentinc/cp-kafka:7.6.1
-    environment:
-      - CLUSTER_ID=q1Sh-9_ISia_zwGINzRvyQ
-      - KAFKA_NODE_ID=1
-      - KAFKA_PROCESS_ROLES=broker,controller
-      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
-      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
-      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
-      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
-      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
-      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
-      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
-    ports:
-      - "9092:9092"
 
   redis:
     image: redis:7-alpine
+
     ports:
       - "6379:6379"
 
-  dashboard:
-    build: .
-    depends_on:
-      - socketio
-      - binance-stream
-    volumes:
-      - .:/app
-    command: python -m http.server 3000 --directory /app/dashboard
-    ports:
-      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
-  socketio:
-    build: .
-    depends_on:
-      - redis
-    volumes:
-      - .:/app
-    environment:
-      - SOCKETIO_REDIS_URL=redis://redis:6379/2
-    command: uvicorn app.socketio_app:app --host 0.0.0.0 --port 8000
+
+  mongodb:
+    image: mongo:7
+
     ports:
-      - "8000:8000"
+      - "27017:27017"
+
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    ports:
+      - "9092:9092"
+
+    environment:
+      CLUSTER_ID: q1Sh-9_ISia_zwGINzRvyQ
+
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+
 
   binance-stream:
     build: .
+
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+
+      mongodb:
+        condition: service_healthy
+
+      kafka:
+        condition: service_healthy
+
     volumes:
       - .:/app
+
     environment:
-      - SOCKETIO_REDIS_URL=redis://redis:6379/2
-      - BINANCE_SYMBOL=btcusdt
-      - VOLUME_WINDOW_SECONDS=60
-      - RECENT_TRADES_LIMIT=20
+      SOCKETIO_REDIS_URL: redis://redis:6379/2
+      BINANCE_SYMBOL: btcusdt
+      VOLUME_WINDOW_SECONDS: 60
+      RECENT_TRADES_LIMIT: 20
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: binance.trades
+
     command: python -m app.binance_stream
 
-  orchestration-monitor:
+
+
+  socketio:
     build: .
+
     depends_on:
-      - redis
-      - kafka
-      - socketio
-      - binance-stream
-      - celery-worker-1
-      - celery-worker-2
-      - celery-worker-3
+      redis:
+        condition: service_healthy
+
     volumes:
       - .:/app
+
     environment:
-      - SOCKETIO_REDIS_URL=redis://redis:6379/2
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-    command: python -m app.orchestration_monitor
+      SOCKETIO_REDIS_URL: redis://redis:6379/2
+
+    command: uvicorn app.socketio_app:app --host 0.0.0.0 --port 8000
+
+    ports:
+      - "8000:8000"
+
+
+
+  dashboard:
+    build: .
+
+    depends_on:
+      socketio:
+        condition: service_started
+
+      binance-stream:
+        condition: service_started
+
+    volumes:
+      - .:/app
+
+    command: python -m http.server 3000 --directory /app/dashboard
+
+    ports:
+      - "3000:3000"
+
+
 
   celery-worker-1:
     build: .
+
     depends_on:
-      - redis
-      - kafka
+      redis:
+        condition: service_healthy
+
+      mongodb:
+        condition: service_healthy
+
+      kafka:
+        condition: service_healthy
+
+      binance-stream:
+        condition: service_started
+
     volumes:
       - .:/app
+
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - SOCKETIO_REDIS_URL=redis://redis:6379/2
-      - WORKER_LABEL=celery-worker-1
-    command: celery -A app.celery_app.celery worker -l info -n worker1@%h
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: binance.trades
+      KAFKA_GROUP_ID: binance-trade-workers
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: market_data
+      MONGODB_COLLECTION: binance_trades
+      SOCKETIO_REDIS_URL: redis://redis:6379/2
+      WORKER_LABEL: celery-worker-1
+
+    command: python -m app.kafka_worker
+
+
 
   celery-worker-2:
     build: .
+
     depends_on:
-      - redis
-      - kafka
+      redis:
+        condition: service_healthy
+
+      mongodb:
+        condition: service_healthy
+
+      kafka:
+        condition: service_healthy
+
+      binance-stream:
+        condition: service_started
+
     volumes:
       - .:/app
+
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - SOCKETIO_REDIS_URL=redis://redis:6379/2
-      - WORKER_LABEL=celery-worker-2
-    command: celery -A app.celery_app.celery worker -l info -n worker2@%h
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: binance.trades
+      KAFKA_GROUP_ID: binance-trade-workers
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: market_data
+      MONGODB_COLLECTION: binance_trades
+      SOCKETIO_REDIS_URL: redis://redis:6379/2
+      WORKER_LABEL: celery-worker-2
+
+    command: python -m app.kafka_worker
+
+
 
   celery-worker-3:
     build: .
+
     depends_on:
-      - redis
-      - kafka
+      redis:
+        condition: service_healthy
+
+      mongodb:
+        condition: service_healthy
+
+      kafka:
+        condition: service_healthy
+
+      binance-stream:
+        condition: service_started
+
     volumes:
       - .:/app
+
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - SOCKETIO_REDIS_URL=redis://redis:6379/2
-      - WORKER_LABEL=celery-worker-3
-    command: celery -A app.celery_app.celery worker -l info -n worker3@%h
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: binance.trades
+      KAFKA_GROUP_ID: binance-trade-workers
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: market_data
+      MONGODB_COLLECTION: binance_trades
+      SOCKETIO_REDIS_URL: redis://redis:6379/2
+      WORKER_LABEL: celery-worker-3
+
+    command: python -m app.kafka_worker
+
+
+
+  orchestration-monitor:
+    build: .
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+      mongodb:
+        condition: service_healthy
+
+      kafka:
+        condition: service_healthy
+
+      socketio:
+        condition: service_started
+
+      binance-stream:
+        condition: service_started
+
+      celery-worker-1:
+        condition: service_started
+
+      celery-worker-2:
+        condition: service_started
+
+      celery-worker-3:
+        condition: service_started
+
+    volumes:
+      - .:/app
+
+    environment:
+      SOCKETIO_REDIS_URL: redis://redis:6379/2
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MONGODB_URI: mongodb://mongodb:27017
+
+    command: python -m app.orchestration_monitor

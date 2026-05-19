@@ -4,6 +4,9 @@ import socket
 import time
 
 from kafka import KafkaAdminClient
+from kafka.errors import NoBrokersAvailable, NodeNotReadyError
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 from .celery_app import celery
 from .health_bus import emit_service_health, redis_client, socketio_message_queue
@@ -19,13 +22,39 @@ def check_redis():
 
 
 def check_kafka():
-    client = KafkaAdminClient(
-        bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),
-        request_timeout_ms=3000,
-        api_version_auto_timeout_ms=3000,
+    bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    last_error = None
+
+    for _ in range(5):
+        client = None
+        try:
+            client = KafkaAdminClient(
+                bootstrap_servers=bootstrap_servers,
+                request_timeout_ms=3000,
+                api_version_auto_timeout_ms=3000,
+            )
+            client.list_topics()
+            return True
+        except (NodeNotReadyError, NoBrokersAvailable, OSError) as exc:
+            last_error = exc
+            time.sleep(2)
+        finally:
+            if client is not None:
+                client.close()
+
+    if last_error is not None:
+        raise last_error
+
+    return False
+
+
+def check_mongodb():
+    client = MongoClient(
+        os.getenv("MONGODB_URI", "mongodb://mongodb:27017"),
+        serverSelectionTimeoutMS=3000,
     )
     try:
-        client.list_topics(timeout=3)
+        client.admin.command("ping")
         return True
     finally:
         client.close()
@@ -75,6 +104,23 @@ def build_snapshot():
             "service": "kafka",
             "status": "healthy" if kafka_ok else "down",
             "message": kafka_message,
+            "timestamp": int(time.time() * 1000),
+        }
+    )
+
+    mongodb_ok = False
+    mongodb_message = "MongoDB not reachable"
+    try:
+        mongodb_ok = check_mongodb()
+        mongodb_message = "MongoDB reachable"
+    except (PyMongoError, OSError) as exc:
+        mongodb_message = str(exc)
+
+    services.append(
+        {
+            "service": "mongodb",
+            "status": "healthy" if mongodb_ok else "down",
+            "message": mongodb_message,
             "timestamp": int(time.time() * 1000),
         }
     )
