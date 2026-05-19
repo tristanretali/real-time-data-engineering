@@ -17,7 +17,7 @@ docker compose up --build
 Notes:
 - Celery ne consomme pas Kafka directement comme broker standard, donc Kafka est fourni comme bus d'evenements et Redis sert de broker Celery.
 - Les workers utilisent la tache `app.tasks.process_message`.
-- Le serveur Socket.IO ecoute sur le port `8000`.
-- Le consumer Binance publie seulement des heartbeats de sante.
+- Le serveur Socket.IO ecoute sur le port `8000` et sert au dashboard de sante, pas au stream Binance.
+- Le stream Binance se reconnecte tout seul si la socket coupe ou devient inactive.
 - Le moniteur d'orchestration publie les snapshots d'etat.
 - Le dashboard est accessible sur `http://localhost:3000`.

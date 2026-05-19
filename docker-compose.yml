@@ -52,7 +52,6 @@ services:
     build: .
     depends_on:
       - redis
-      - socketio
     volumes:
       - .:/app
     environment:
