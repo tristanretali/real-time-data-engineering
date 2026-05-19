@@ -29,6 +29,11 @@ def save_volume_snapshot(volume: dict):
     return volume
 
 
+def save_price_snapshot(price: dict):
+    redis_client.setex("snapshot:price", SNAPSHOT_TTL_SECONDS, json.dumps(price))
+    return price
+
+
 def get_recent_trades_snapshot():
     raw = redis_client.get("snapshot:recent_trades")
     if not raw:
@@ -47,6 +52,15 @@ def get_volume_snapshot():
     return json.loads(raw)
 
 
+def get_price_snapshot():
+    raw = redis_client.get("snapshot:price")
+    if not raw:
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    return json.loads(raw)
+
+
 def emit_recent_trades(trades: list):
     payload = {
         "recent_trades": trades,
@@ -58,3 +72,8 @@ def emit_recent_trades(trades: list):
 def emit_volume(volume: dict):
     socketio_manager.emit("volume", volume)
     return volume
+
+
+def emit_price(price: dict):
+    socketio_manager.emit("price", price)
+    return price

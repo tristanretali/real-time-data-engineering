@@ -6,6 +6,8 @@ from .socketio_event import (
     emit_volume,
     save_recent_trades_snapshot,
     save_volume_snapshot,
+    save_price_snapshot,
+    emit_price,
 )
 from .database import trades_collection
 
@@ -80,3 +82,48 @@ def volume(
     emit_volume(volume)
 
     return volume
+
+
+@router.get("/price")
+def price(
+    symbol: str = Query("BTCUSDT"),
+    change_window_seconds: int = Query(3600, ge=60, le=86400),  # défaut 1h
+):
+
+    current_trade = trades_collection.find_one(
+        {"symbol": symbol}, sort=[("trade_time", -1)]
+    )
+
+    current_price = float(current_trade.get("price", 0))
+    current_time = int(current_trade.get("trade_time", 0))
+
+    # Prix il y a X secondes
+    since_ms = current_time - (change_window_seconds * 1000)
+    old_trade = trades_collection.find_one(
+        {
+            "symbol": symbol,
+            "trade_time": {"$lte": since_ms},
+        },
+        sort=[("trade_time", -1)],
+    )
+
+    if not old_trade:
+        price_change_percent = 0.0
+
+    else:
+        old_price = float(old_trade.get("price", 0))
+        price_change_percent = (
+            ((current_price - old_price) / old_price * 100) if old_price != 0 else 0
+        )
+
+    price_data = {
+        "symbol": symbol,
+        "current_price": round(current_price, 2),
+        "change_percent": round(price_change_percent, 2),
+        "window_minutes": change_window_seconds // 60,
+        "timestamp": current_time,
+    }
+
+    save_price_snapshot(price_data)
+    emit_price(price_data)
+    return price_data
