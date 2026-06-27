@@ -59,23 +59,36 @@ def volume(
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     since_ms = now_ms - (window_seconds * 1000)
 
-    trades = list(
-        trades_collection.find(
-            {
+    pipeline = [
+        {
+            "$match": {
                 "symbol": symbol,
                 "trade_time": {"$gte": since_ms},
             }
-        )
-    )
+        },
+        {
+            "$group": {
+                "_id": None,
+                "total_volume_usd": {
+                    "$sum": {
+                        "$multiply": [
+                            {"$toDouble": "$price"},
+                            {"$toDouble": "$quantity"},
+                        ]
+                    }
+                },
+                "count": {"$sum": 1},
+            }
+        },
+    ]
 
-    volume_amount = 0.0
-    for trade in trades:
-        volume_amount += float(trade.get("price", 0)) * float(trade.get("quantity", 0))
+    result = list(trades_collection.aggregate(pipeline))
+    summary = result[0] if result else {"total_volume_usd": 0, "count": 0}
 
     volume = {
         "window_minutes": window_seconds // 60,
-        "total_volume_usd": round(volume_amount, 2),
-        "count": len(trades),
+        "total_volume_usd": round(float(summary["total_volume_usd"]), 2),
+        "count": int(summary["count"]),
     }
 
     save_volume_snapshot(volume)
@@ -93,6 +106,20 @@ def price(
     current_trade = trades_collection.find_one(
         {"symbol": symbol}, sort=[("trade_time", -1)]
     )
+
+    if not current_trade:
+        price_data = {
+            "symbol": symbol,
+            "current_price": 0.0,
+            "change_percent": 0.0,
+            "window_minutes": change_window_seconds // 60,
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+        }
+
+        save_price_snapshot(price_data)
+        emit_price(price_data)
+
+        return price_data
 
     current_price = float(current_trade.get("price", 0))
     current_time = int(current_trade.get("trade_time", 0))
