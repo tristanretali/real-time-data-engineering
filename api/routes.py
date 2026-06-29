@@ -1,30 +1,16 @@
 from fastapi import APIRouter, Query
-from datetime import datetime, timezone
 
-from .socketio_event import (
-    emit_recent_trades,
-    emit_volume,
-    save_recent_trades_snapshot,
-    save_volume_snapshot,
-    save_price_snapshot,
-    emit_price,
-    save_alerts_snapshot,
-    emit_alerts,
-    save_trade_rate_snapshot,
-    emit_trade_rate,
-    save_price_history_snapshot,
-    emit_price_history,
-)
+from .constants import DEFAULT_SYMBOL, PRICE_HISTORY_BUCKET_MS, VOLUME_WINDOWS_SECONDS
 from .database import trades_collection
+from .socketio_event import publish
+from .time_utils import ms_ago, ms_to_iso, now_ms
 
 router = APIRouter()
-VOLUME_WINDOWS_SECONDS = [60, 300, 900]
-PRICE_HISTORY_BUCKET_MS = 60 * 1000
 
 
 @router.get("/recent_trades")
 def recent_trades(
-    symbol: str = Query("BTCUSDT"),
+    symbol: str = Query(DEFAULT_SYMBOL),
     limit: int = Query(5, ge=1, le=50),
 ):
     trades = list(
@@ -53,22 +39,17 @@ def recent_trades(
         trade["quantity"] = round(trade["quantity"], 8)
 
         timestamp = trade.get("trade_time")
-        dt = datetime.fromtimestamp(float(timestamp) / 1000.0, tz=timezone.utc)
-        trade["trade_time_iso"] = dt.isoformat()
+        trade["trade_time_iso"] = ms_to_iso(timestamp)
 
-    save_recent_trades_snapshot(trades)
-    emit_recent_trades(trades)
-
-    return {"recent_trades": trades}
+    return publish("recent_trades", {"recent_trades": trades})
 
 
 @router.get("/trade_rate")
 def trade_rate(
-    symbol: str = Query("BTCUSDT"),
+    symbol: str = Query(DEFAULT_SYMBOL),
     window_seconds: int = Query(10, ge=1, le=60),
 ):
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    since_ms = now_ms - (window_seconds * 1000)
+    since_ms = ms_ago(now_ms(), window_seconds)
 
     count = trades_collection.count_documents(
         {"symbol": symbol, "trade_time": {"$gte": since_ms}}
@@ -81,19 +62,15 @@ def trade_rate(
         "trades_per_second": round(count / window_seconds, 2),
     }
 
-    save_trade_rate_snapshot(payload)
-    emit_trade_rate(payload)
-
-    return payload
+    return publish("trade_rate", payload)
 
 
 @router.get("/price_history")
 def price_history(
-    symbol: str = Query("BTCUSDT"),
+    symbol: str = Query(DEFAULT_SYMBOL),
     window_minutes: int = Query(15, ge=1, le=180),
 ):
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    since_ms = now_ms - (window_minutes * 60 * 1000)
+    since_ms = ms_ago(now_ms(), window_minutes * 60)
 
     pipeline = [
         {"$match": {"symbol": symbol, "trade_time": {"$gte": since_ms}}},
@@ -127,15 +104,12 @@ def price_history(
         "points": points,
     }
 
-    save_price_history_snapshot(payload)
-    emit_price_history(payload)
-
-    return payload
+    return publish("price_history", payload)
 
 
 @router.get("/volume")
-def volume(symbol: str = Query("BTCUSDT")):
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+def volume(symbol: str = Query(DEFAULT_SYMBOL)):
+    current_ms = now_ms()
     largest_window_seconds = max(VOLUME_WINDOWS_SECONDS)
 
     group_stage = {
@@ -155,7 +129,7 @@ def volume(symbol: str = Query("BTCUSDT")):
         {
             "$match": {
                 "symbol": symbol,
-                "trade_time": {"$gte": now_ms - largest_window_seconds * 1000},
+                "trade_time": {"$gte": ms_ago(current_ms, largest_window_seconds)},
             }
         },
         {
@@ -163,7 +137,7 @@ def volume(symbol: str = Query("BTCUSDT")):
                 f"w_{window_seconds}": [
                     {
                         "$match": {
-                            "trade_time": {"$gte": now_ms - window_seconds * 1000}
+                            "trade_time": {"$gte": ms_ago(current_ms, window_seconds)}
                         }
                     },
                     {"$group": group_stage},
@@ -191,18 +165,14 @@ def volume(symbol: str = Query("BTCUSDT")):
 
     payload = {"symbol": symbol, "windows": windows}
 
-    save_volume_snapshot(payload)
-    emit_volume(payload)
-
-    return payload
+    return publish("volume", payload)
 
 
 @router.get("/price")
 def price(
-    symbol: str = Query("BTCUSDT"),
+    symbol: str = Query(DEFAULT_SYMBOL),
     change_window_seconds: int = Query(3600, ge=60, le=86400),
 ):
-
     current_trade = trades_collection.find_one(
         {"symbol": symbol}, sort=[("trade_time", -1)]
     )
@@ -213,19 +183,14 @@ def price(
             "current_price": 0.0,
             "change_percent": 0.0,
             "window_minutes": change_window_seconds // 60,
-            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+            "timestamp": now_ms(),
         }
-
-        save_price_snapshot(price_data)
-        emit_price(price_data)
-
-        return price_data
+        return publish("price", price_data)
 
     current_price = float(current_trade.get("price", 0))
     current_time = int(current_trade.get("trade_time", 0))
 
-    # Prix il y a X secondes
-    since_ms = current_time - (change_window_seconds * 1000)
+    since_ms = ms_ago(current_time, change_window_seconds)
     old_trade = trades_collection.find_one(
         {
             "symbol": symbol,
@@ -236,7 +201,6 @@ def price(
 
     if not old_trade:
         price_change_percent = 0.0
-
     else:
         old_price = float(old_trade.get("price", 0))
         price_change_percent = (
@@ -251,20 +215,17 @@ def price(
         "timestamp": current_time,
     }
 
-    save_price_snapshot(price_data)
-    emit_price(price_data)
-    return price_data
+    return publish("price", price_data)
 
 
 @router.get("/alerts")
 def alerts(
-    symbol: str = Query("BTCUSDT"),
+    symbol: str = Query(DEFAULT_SYMBOL),
     window_seconds: int = Query(60, ge=10, le=3600),
 ):
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    since_ms = now_ms - (window_seconds * 1000)
+    since_ms = ms_ago(now_ms(), window_seconds)
 
-    recent_trades = list(
+    trades = list(
         trades_collection.find(
             {
                 "symbol": symbol,
@@ -280,30 +241,26 @@ def alerts(
         ).sort("trade_time", -1)
     )
 
-    alerts_list = []
-
-    if not recent_trades:
+    if not trades:
         payload = {
             "symbol": symbol,
             "window_minutes": window_seconds // 60,
             "alerts": [],
             "count": 0,
         }
-        save_alerts_snapshot(payload)
-        emit_alerts(payload)
-        return payload
+        return publish("alerts", payload)
 
     volumes = []
     quantities = []
     prices = []
 
-    for trade in recent_trades:
-        price = float(trade.get("price", 0))
+    for trade in trades:
+        trade_price = float(trade.get("price", 0))
         quantity = float(trade.get("quantity", 0))
-        amount = price * quantity
+        amount = trade_price * quantity
         volumes.append(amount)
         quantities.append(quantity)
-        prices.append(price)
+        prices.append(trade_price)
 
     sorted_volumes = sorted(volumes)
     median_volume = sorted_volumes[len(sorted_volumes) // 2] if sorted_volumes else 0
@@ -321,7 +278,9 @@ def alerts(
         else 0
     )
 
-    if max_volume >= median_volume * 10 and len(recent_trades) >= 2:
+    alerts_list = []
+
+    if max_volume >= median_volume * 10 and len(trades) >= 2:
         multiplier = round(max_volume / median_volume, 0) if median_volume > 0 else 0
         alerts_list.append(
             {
@@ -349,11 +308,8 @@ def alerts(
     payload = {
         "symbol": symbol,
         "window_minutes": window_seconds // 60,
-        "count": len(recent_trades),
+        "count": len(trades),
         "alerts": alerts_list,
     }
 
-    save_alerts_snapshot(payload)
-    emit_alerts(payload)
-
-    return payload
+    return publish("alerts", payload)

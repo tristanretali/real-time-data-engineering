@@ -1,7 +1,8 @@
-import os
 import json
-import socketio
+import os
+
 import redis
+import socketio
 
 REDIS_URL = os.getenv("SOCKETIO_REDIS_URL", "redis://redis:6379/2")
 SNAPSHOT_TTL_SECONDS = int(os.getenv("RECENT_TRADES_SNAPSHOT_TTL", "120"))
@@ -14,109 +15,42 @@ socketio_manager = socketio.RedisManager(
 redis_client = redis.Redis.from_url(REDIS_URL)
 
 
-def save_recent_trades_snapshot(trades: list):
-    payload = {
-        "recent_trades": trades,
-    }
-    redis_client.setex(
-        "snapshot:recent_trades", SNAPSHOT_TTL_SECONDS, json.dumps(payload)
-    )
+def save_snapshot(name: str, payload: dict) -> dict:
+    redis_client.setex(f"snapshot:{name}", SNAPSHOT_TTL_SECONDS, json.dumps(payload))
     return payload
 
 
-def save_volume_snapshot(volume: dict):
-    redis_client.setex("snapshot:volume", SNAPSHOT_TTL_SECONDS, json.dumps(volume))
-    return volume
+def get_snapshot(name: str) -> dict | None:
+    raw = redis_client.get(f"snapshot:{name}")
+    if not raw:
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    return json.loads(raw)
 
 
-def save_price_snapshot(price: dict):
-    redis_client.setex("snapshot:price", SNAPSHOT_TTL_SECONDS, json.dumps(price))
-    return price
+def emit_event(name: str, payload: dict) -> dict:
+    socketio_manager.emit(name, payload)
+    return payload
 
 
-def save_alerts_snapshot(alerts: dict):
-    redis_client.setex("snapshot:alerts", SNAPSHOT_TTL_SECONDS, json.dumps(alerts))
-    return alerts
-
-
-def save_trade_rate_snapshot(trade_rate: dict):
-    redis_client.setex(
-        "snapshot:trade_rate", SNAPSHOT_TTL_SECONDS, json.dumps(trade_rate)
-    )
-    return trade_rate
-
-
-def save_price_history_snapshot(price_history: dict):
-    redis_client.setex(
-        "snapshot:price_history", SNAPSHOT_TTL_SECONDS, json.dumps(price_history)
-    )
-    return price_history
+def publish(name: str, payload: dict) -> dict:
+    save_snapshot(name, payload)
+    emit_event(name, payload)
+    return payload
 
 
 def get_recent_trades_snapshot():
-    raw = redis_client.get("snapshot:recent_trades")
-    if not raw:
-        return None
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8")
-    return json.loads(raw)
+    return get_snapshot("recent_trades")
 
 
 def get_volume_snapshot():
-    raw = redis_client.get("snapshot:volume")
-    if not raw:
-        return None
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8")
-    return json.loads(raw)
+    return get_snapshot("volume")
 
 
 def get_price_snapshot():
-    raw = redis_client.get("snapshot:price")
-    if not raw:
-        return None
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8")
-    return json.loads(raw)
+    return get_snapshot("price")
 
 
 def get_alerts_snapshot():
-    raw = redis_client.get("snapshot:alerts")
-    if not raw:
-        return None
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8")
-    return json.loads(raw)
-
-
-def emit_recent_trades(trades: list):
-    payload = {
-        "recent_trades": trades,
-    }
-    socketio_manager.emit("recent_trades", payload)
-    return payload
-
-
-def emit_volume(volume: dict):
-    socketio_manager.emit("volume", volume)
-    return volume
-
-
-def emit_price(price: dict):
-    socketio_manager.emit("price", price)
-    return price
-
-
-def emit_alerts(alerts: dict):
-    socketio_manager.emit("alerts", alerts)
-    return alerts
-
-
-def emit_trade_rate(trade_rate: dict):
-    socketio_manager.emit("trade_rate", trade_rate)
-    return trade_rate
-
-
-def emit_price_history(price_history: dict):
-    socketio_manager.emit("price_history", price_history)
-    return price_history
+    return get_snapshot("alerts")

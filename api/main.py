@@ -1,16 +1,11 @@
 import threading
 import time
+from typing import Callable
 
 from fastapi import FastAPI
-from .routes import (
-    router,
-    alerts,
-    price,
-    price_history,
-    recent_trades,
-    trade_rate,
-    volume,
-)
+
+from .constants import DEFAULT_SYMBOL
+from .routes import alerts, price, price_history, recent_trades, router, trade_rate, volume
 
 app = FastAPI(title="API Dashboard Crypto")
 
@@ -18,40 +13,41 @@ FAST_POLL_SECONDS = 1
 SLOW_POLL_SECONDS = 5
 CHART_POLL_SECONDS = 20
 
+FAST_JOBS = [
+    ("recent_trades", recent_trades, {"symbol": DEFAULT_SYMBOL, "limit": 5}),
+    ("trade_rate", trade_rate, {"symbol": DEFAULT_SYMBOL, "window_seconds": 60}),
+]
 
-def safe_call(label, fn, **kwargs):
+SLOW_JOBS = [
+    ("price", price, {"symbol": DEFAULT_SYMBOL, "change_window_seconds": 900}),
+    ("volume", volume, {"symbol": DEFAULT_SYMBOL}),
+    ("alerts", alerts, {"symbol": DEFAULT_SYMBOL, "window_seconds": 300}),
+]
+
+CHART_JOBS = [
+    ("price_history", price_history, {"symbol": DEFAULT_SYMBOL, "window_minutes": 15}),
+]
+
+
+def safe_call(label: str, fn: Callable, **kwargs) -> None:
     try:
         fn(**kwargs)
     except Exception as exc:
         print(f"poll error [{label}]: {exc}")
 
 
-def poll_fast():
+def run_loop(interval_seconds: float, jobs: list[tuple[str, Callable, dict]]) -> None:
     while True:
-        safe_call("recent_trades", recent_trades, symbol="BTCUSDT", limit=5)
-        safe_call("trade_rate", trade_rate, symbol="BTCUSDT", window_seconds=60)
-        time.sleep(FAST_POLL_SECONDS)
-
-
-def poll_slow():
-    while True:
-        safe_call("price", price, symbol="BTCUSDT", change_window_seconds=3600)
-        safe_call("volume", volume, symbol="BTCUSDT")
-        safe_call("alerts", alerts, symbol="BTCUSDT", window_seconds=300)
-        time.sleep(SLOW_POLL_SECONDS)
-
-
-def poll_chart():
-    while True:
-        safe_call("price_history", price_history, symbol="BTCUSDT", window_minutes=15)
-        time.sleep(CHART_POLL_SECONDS)
+        for label, fn, kwargs in jobs:
+            safe_call(label, fn, **kwargs)
+        time.sleep(interval_seconds)
 
 
 @app.on_event("startup")
 def start_market_data_pollers():
-    threading.Thread(target=poll_fast, daemon=True).start()
-    threading.Thread(target=poll_slow, daemon=True).start()
-    threading.Thread(target=poll_chart, daemon=True).start()
+    threading.Thread(target=run_loop, args=(FAST_POLL_SECONDS, FAST_JOBS), daemon=True).start()
+    threading.Thread(target=run_loop, args=(SLOW_POLL_SECONDS, SLOW_JOBS), daemon=True).start()
+    threading.Thread(target=run_loop, args=(CHART_POLL_SECONDS, CHART_JOBS), daemon=True).start()
 
 
 app.include_router(router, prefix="/api")
