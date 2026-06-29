@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, Query
 from datetime import datetime, timezone
 
 from .socketio_event import emit_recent_trades
@@ -17,10 +17,12 @@ def recent_trades(
             {"symbol": symbol},
             {
                 "_id": 1,
+                "trade_id": 1,
                 "price": 1,
                 "quantity": 1,
                 "symbol": 1,
                 "trade_time": 1,
+                "is_market_maker": 1,
             },
         )
         .sort("trade_time", -1)
@@ -32,6 +34,8 @@ def recent_trades(
 
         amount = trade["price"] * trade["quantity"]
         trade["amount"] = round(amount, 2)
+        trade["price"] = round(trade["price"], 2)
+        trade["quantity"] = round(trade["quantity"], 8)
 
         timestamp = trade.get("trade_time")
         dt = datetime.fromtimestamp(float(timestamp) / 1000.0, tz=timezone.utc)
