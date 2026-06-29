@@ -31,24 +31,12 @@ const quantityFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 8,
 });
 
-const defaultPriceSeries = [
-  { time: "13:52", price: 67030, average: 67020 },
-  { time: "13:55", price: 67070, average: 67050 },
-  { time: "13:58", price: 67082, average: 67062 },
-  { time: "14:01", price: 67045, average: 67078 },
-  { time: "14:04", price: 67118, average: 67102 },
-  { time: "14:07", price: 67162, average: 67124 },
-];
-
-const fallbackTrades = [];
+const defaultPriceSeries = [];
 
 function formatTradeTime(value) {
   if (!value) return "--:--:--";
 
-  const date =
-    typeof value === "number"
-      ? new Date(value)
-      : new Date(value);
+  const date = typeof value === "number" ? new Date(value) : new Date(value);
 
   return date.toLocaleTimeString("fr-FR", {
     hour: "2-digit",
@@ -83,10 +71,6 @@ function KpiCard({ label, value, meta, tone }) {
   );
 }
 
-
-
-
-
 function PriceChart({ series }) {
   return (
     <article className="card chart-panel">
@@ -117,7 +101,9 @@ function PriceChart({ series }) {
               tick={{ fill: "#9ca3af", fontSize: 12 }}
               axisLine={{ stroke: "#374151" }}
               tickLine={{ stroke: "#374151" }}
-              tickFormatter={(value) => `$${Number(value).toLocaleString("en-US")}`}
+              tickFormatter={(value) =>
+                `$${Number(value).toLocaleString("en-US")}`
+              }
             />
 
             <Tooltip
@@ -157,8 +143,6 @@ function PriceChart({ series }) {
     </article>
   );
 }
-
-
 
 function RecentTrades({ trades, status }) {
   return (
@@ -218,8 +202,20 @@ function AlertsPanel({ alerts }) {
 }
 
 function VolumePanel({ volume }) {
-  const total = Number(volume?.total_volume_usd || 0);
-  const count = Number(volume?.count || 0);
+  const one = volume?.oneMinute;
+  const five = volume?.fiveMinutes;
+  const fifteen = volume?.fifteenMinutes;
+
+  const maxVolume = Math.max(
+    Number(one?.total_volume_usd || 0),
+    Number(five?.total_volume_usd || 0),
+    Number(fifteen?.total_volume_usd || 0),
+    1
+  );
+
+  const getWidth = (value) => {
+    return `${Math.max((Number(value || 0) / maxVolume) * 100, 8)}%`;
+  };
 
   return (
     <article className="card">
@@ -231,77 +227,55 @@ function VolumePanel({ volume }) {
 
       <div className="volume-list">
         <div className="volume-row">
-          <span>{volume?.window_minutes || 0} min</span>
-          <b className="btc" style={{ "--width": "80%" }}></b>
-          <strong>{currencyFormatter.format(total)}</strong>
+          <span>1 min</span>
+          <b
+            className="btc"
+            style={{ "--width": getWidth(one?.total_volume_usd) }}
+          ></b>
+          <strong>
+            {currencyFormatter.format(one?.total_volume_usd || 0)}
+          </strong>
         </div>
 
         <div className="volume-row">
-          <span>Trades</span>
+          <span>5 min</span>
+          <b
+            className="btc"
+            style={{ "--width": getWidth(five?.total_volume_usd) }}
+          ></b>
+          <strong>
+            {currencyFormatter.format(five?.total_volume_usd || 0)}
+          </strong>
+        </div>
+
+        <div className="volume-row">
+          <span>15 min</span>
+          <b
+            className="btc"
+            style={{ "--width": getWidth(fifteen?.total_volume_usd) }}
+          ></b>
+          <strong>
+            {currencyFormatter.format(fifteen?.total_volume_usd || 0)}
+          </strong>
+        </div>
+
+        <div className="volume-row">
+          <span>Trades 5 min</span>
           <b className="eth" style={{ "--width": "55%" }}></b>
-          <strong>{count}</strong>
+          <strong>{five?.count || 0}</strong>
         </div>
       </div>
     </article>
   );
 }
 
-
-// function VolumePanel({ volume }) {
-
-//   const one = volume?.oneMinute;
-//   const five = volume?.fiveMinutes;
-//   const fifteen = volume?.fifteenMinutes;
-
-//   return (
-//     <article className="card">
-//       <div className="panel-title">
-//         <h2>
-//           <BarChart3 size={18} /> Volume par fenêtre
-//         </h2>
-//       </div>
-
-//       <div className="volume-list">
-
-//         <div className="volume-row">
-//           <span>1 min</span>
-//           <b className="btc" style={{ "--width": "35%" }}></b>
-//           <strong>
-//             {currencyFormatter.format(one?.total_volume_usd || 0)}
-//           </strong>
-//         </div>
-
-//         <div className="volume-row">
-//           <span>5 min</span>
-//           <b className="btc" style={{ "--width": "70%" }}></b>
-//           <strong>
-//             {currencyFormatter.format(five?.total_volume_usd || 0)}
-//           </strong>
-//         </div>
-
-//         <div className="volume-row">
-//           <span>15 min</span>
-//           <b className="btc" style={{ "--width": "100%" }}></b>
-//           <strong>
-//             {currencyFormatter.format(fifteen?.total_volume_usd || 0)}
-//           </strong>
-//         </div>
-
-//         <div className="volume-row">
-//           <span>Trades</span>
-//           <b className="eth" style={{ "--width": "55%" }}></b>
-//           <strong>{five?.count || 0}</strong>
-//         </div>
-
-//       </div>
-//     </article>
-//   );
-// }
-
-
 function PipelineHealth({ status }) {
   const rows = [
-    ["API FastAPI", status === "API live" ? "connectée" : "indisponible", status === "API live" ? "positive" : "warning"],
+    [
+      "API FastAPI",
+      status === "API live" ? "connectée" : "indisponible",
+      status === "API live" ? "positive" : "warning",
+    ],
     ["Base de données", "MongoDB", "positive"],
     ["WebSocket", "Binance", "positive"],
     ["Dashboard", "React actif", "positive"],
@@ -328,7 +302,7 @@ function PipelineHealth({ status }) {
 }
 
 function App() {
-  const [tradeFeed, setTradeFeed] = useState(fallbackTrades);
+  const [tradeFeed, setTradeFeed] = useState([]);
   const [tradeStatus, setTradeStatus] = useState("chargement API");
 
   const [currentPrice, setCurrentPrice] = useState("$0.00");
@@ -341,21 +315,17 @@ function App() {
 
   async function refreshDashboard() {
     try {
-      const [tradesRes, priceRes, volumeRes, alertsRes] =
+      const [tradesRes, priceRes, volume1Res, volume5Res, volume15Res, alertsRes] =
         await Promise.allSettled([
           fetch(`${API_BASE_URL}/api/recent_trades?symbol=BTCUSDT&limit=6`),
-          fetch(`${API_BASE_URL}/api/price?symbol=BTCUSDT&change_window_seconds=3600`),
+          fetch(
+            `${API_BASE_URL}/api/price?symbol=BTCUSDT&change_window_seconds=3600`
+          ),
+          fetch(`${API_BASE_URL}/api/volume?symbol=BTCUSDT&window_seconds=60`),
           fetch(`${API_BASE_URL}/api/volume?symbol=BTCUSDT&window_seconds=300`),
-      //     Promise.all([
-      //     fetch(`${API_BASE_URL}/api/volume?symbol=BTCUSDT&window_seconds=60`),
-      //     fetch(`${API_BASE_URL}/api/volume?symbol=BTCUSDT&window_seconds=300`),
-      //     fetch(`${API_BASE_URL}/api/volume?symbol=BTCUSDT&window_seconds=900`)
-      // ]),
+          fetch(`${API_BASE_URL}/api/volume?symbol=BTCUSDT&window_seconds=900`),
           fetch(`${API_BASE_URL}/api/alerts?symbol=BTCUSDT&window_seconds=600`),
         ]);
-
-
-
 
       if (tradesRes.status === "fulfilled" && tradesRes.value.ok) {
         const data = await tradesRes.value.json();
@@ -383,48 +353,72 @@ function App() {
             second: "2-digit",
           });
 
-          const nextPoint = {
-            time: now,
-            price,
-            average: price,
-          };
+          const previousPoints = oldSeries.slice(-19);
+          const average =
+            [...previousPoints, { price }]
+              .slice(-5)
+              .reduce((sum, point) => sum + Number(point.price || 0), 0) /
+            Math.min([...previousPoints, { price }].slice(-5).length, 5);
 
-          return [...oldSeries.slice(-20), nextPoint];
+          return [
+            ...previousPoints,
+            {
+              time: now,
+              price,
+              average: Number(average.toFixed(2)),
+            },
+          ];
         });
       }
 
-      if (volumeRes.status === "fulfilled" && volumeRes.value.ok) {
-        const data = await volumeRes.value.json();
-        setVolume(data);
+      if (
+        volume1Res.status === "fulfilled" &&
+        volume1Res.value.ok &&
+        volume5Res.status === "fulfilled" &&
+        volume5Res.value.ok &&
+        volume15Res.status === "fulfilled" &&
+        volume15Res.value.ok
+      ) {
+        const [vol1m, vol5m, vol15m] = await Promise.all([
+          volume1Res.value.json(),
+          volume5Res.value.json(),
+          volume15Res.value.json(),
+        ]);
+
+        setVolume({
+          oneMinute: vol1m,
+          fiveMinutes: vol5m,
+          fifteenMinutes: vol15m,
+        });
       }
 
       if (alertsRes.status === "fulfilled" && alertsRes.value.ok) {
         const data = await alertsRes.value.json();
         setAlerts(data.alerts || []);
       }
-    } catch {
+    } catch (error) {
+      console.error(error);
       setTradeStatus("API indisponible");
     }
   }
 
+  useEffect(() => {
+    refreshDashboard();
 
+    const interval = setInterval(refreshDashboard, 5000);
 
-useEffect(() => {
-  refreshDashboard();
+    return () => clearInterval(interval);
+  }, []);
 
-  const interval = setInterval(refreshDashboard, 5000);
-
-  return () => clearInterval(interval);
-}, []);
-
-
-
-  const volumeValue = volume
-    ? currencyFormatter.format(volume.total_volume_usd || 0)
+  const volumeValue = volume?.fiveMinutes
+    ? currencyFormatter.format(volume.fiveMinutes.total_volume_usd || 0)
     : "$0.00";
 
-  const tradesPerSecond = volume
-    ? (Number(volume.count || 0) / Number(volume.window_seconds || 300)).toFixed(1)
+  const tradesPerSecond = volume?.fiveMinutes
+    ? (
+        Number(volume.fiveMinutes.count || 0) /
+        Number(volume.fiveMinutes.window_seconds || 300)
+      ).toFixed(1)
     : "0.0";
 
   return (
@@ -471,7 +465,7 @@ useEffect(() => {
         <KpiCard
           label="Vol glissant 5 min"
           value={volumeValue}
-          meta={`${volume?.count || 0} trades`}
+          meta={`${volume?.fiveMinutes?.count || 0} trades`}
         />
 
         <KpiCard
