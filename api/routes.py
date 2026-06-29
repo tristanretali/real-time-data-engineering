@@ -12,11 +12,14 @@ from .socketio_event import (
     emit_alerts,
     save_trade_rate_snapshot,
     emit_trade_rate,
+    save_price_history_snapshot,
+    emit_price_history,
 )
 from .database import trades_collection
 
 router = APIRouter()
 VOLUME_WINDOWS_SECONDS = [60, 300, 900]
+PRICE_HISTORY_BUCKET_MS = 60 * 1000
 
 
 @router.get("/recent_trades")
@@ -80,6 +83,52 @@ def trade_rate(
 
     save_trade_rate_snapshot(payload)
     emit_trade_rate(payload)
+
+    return payload
+
+
+@router.get("/price_history")
+def price_history(
+    symbol: str = Query("BTCUSDT"),
+    window_minutes: int = Query(15, ge=1, le=180),
+):
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    since_ms = now_ms - (window_minutes * 60 * 1000)
+
+    pipeline = [
+        {"$match": {"symbol": symbol, "trade_time": {"$gte": since_ms}}},
+        {
+            "$group": {
+                "_id": {
+                    "$subtract": [
+                        "$trade_time",
+                        {"$mod": ["$trade_time", PRICE_HISTORY_BUCKET_MS]},
+                    ]
+                },
+                "avg_price": {"$avg": {"$toDouble": "$price"}},
+            }
+        },
+        {"$sort": {"_id": 1}},
+    ]
+
+    buckets = list(trades_collection.aggregate(pipeline))
+
+    points = [
+        {
+            "time": int(bucket["_id"]),
+            "price": round(float(bucket["avg_price"]), 2),
+        }
+        for bucket in buckets
+    ]
+
+    payload = {
+        "symbol": symbol,
+        "window_minutes": window_minutes,
+        "points": points,
+    }
+
+    save_price_history_snapshot(payload)
+    emit_price_history(payload)
 
     return payload
 

@@ -2,12 +2,21 @@ import threading
 import time
 
 from fastapi import FastAPI
-from .routes import router, alerts, price, recent_trades, trade_rate, volume
+from .routes import (
+    router,
+    alerts,
+    price,
+    price_history,
+    recent_trades,
+    trade_rate,
+    volume,
+)
 
 app = FastAPI(title="API Dashboard Crypto")
 
 FAST_POLL_SECONDS = 1
 SLOW_POLL_SECONDS = 5
+CHART_POLL_SECONDS = 20
 
 
 def safe_call(label, fn, **kwargs):
@@ -32,10 +41,17 @@ def poll_slow():
         time.sleep(SLOW_POLL_SECONDS)
 
 
+def poll_chart():
+    while True:
+        safe_call("price_history", price_history, symbol="BTCUSDT", window_minutes=15)
+        time.sleep(CHART_POLL_SECONDS)
+
+
 @app.on_event("startup")
 def start_market_data_pollers():
     threading.Thread(target=poll_fast, daemon=True).start()
     threading.Thread(target=poll_slow, daemon=True).start()
+    threading.Thread(target=poll_chart, daemon=True).start()
 
 
 app.include_router(router, prefix="/api")

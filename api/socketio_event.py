@@ -46,6 +46,13 @@ def save_trade_rate_snapshot(trade_rate: dict):
     return trade_rate
 
 
+def save_price_history_snapshot(price_history: dict):
+    redis_client.setex(
+        "snapshot:price_history", SNAPSHOT_TTL_SECONDS, json.dumps(price_history)
+    )
+    return price_history
+
+
 def get_recent_trades_snapshot():
     raw = redis_client.get("snapshot:recent_trades")
     if not raw:
@@ -108,3 +115,8 @@ def emit_alerts(alerts: dict):
 def emit_trade_rate(trade_rate: dict):
     socketio_manager.emit("trade_rate", trade_rate)
     return trade_rate
+
+
+def emit_price_history(price_history: dict):
+    socketio_manager.emit("price_history", price_history)
+    return price_history
