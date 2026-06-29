@@ -14,6 +14,7 @@ from .socketio_event import (
 from .database import trades_collection
 
 router = APIRouter()
+VOLUME_WINDOWS_SECONDS = [60, 300, 900]
 
 
 @router.get("/recent_trades")
@@ -57,51 +58,67 @@ def recent_trades(
 
 
 @router.get("/volume")
-def volume(
-    symbol: str = Query("BTCUSDT"),
-    window_seconds: int = Query(120, ge=10, le=3600),
-):
-    # Calcul de la fenêtre de temps
+def volume(symbol: str = Query("BTCUSDT")):
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    since_ms = now_ms - (window_seconds * 1000)
+    largest_window_seconds = max(VOLUME_WINDOWS_SECONDS)
+
+    group_stage = {
+        "_id": None,
+        "total_volume_usd": {
+            "$sum": {
+                "$multiply": [
+                    {"$toDouble": "$price"},
+                    {"$toDouble": "$quantity"},
+                ]
+            }
+        },
+        "count": {"$sum": 1},
+    }
 
     pipeline = [
         {
             "$match": {
                 "symbol": symbol,
-                "trade_time": {"$gte": since_ms},
+                "trade_time": {"$gte": now_ms - largest_window_seconds * 1000},
             }
         },
         {
-            "$group": {
-                "_id": None,
-                "total_volume_usd": {
-                    "$sum": {
-                        "$multiply": [
-                            {"$toDouble": "$price"},
-                            {"$toDouble": "$quantity"},
-                        ]
-                    }
-                },
-                "count": {"$sum": 1},
+            "$facet": {
+                f"w_{window_seconds}": [
+                    {
+                        "$match": {
+                            "trade_time": {"$gte": now_ms - window_seconds * 1000}
+                        }
+                    },
+                    {"$group": group_stage},
+                ]
+                for window_seconds in VOLUME_WINDOWS_SECONDS
             }
         },
     ]
 
     result = list(trades_collection.aggregate(pipeline))
-    summary = result[0] if result else {"total_volume_usd": 0, "count": 0}
+    facets = result[0] if result else {}
 
-    volume = {
-        "window_minutes": window_seconds // 60,
-        "window_seconds": window_seconds,
-        "total_volume_usd": round(float(summary["total_volume_usd"]), 2),
-        "count": int(summary["count"]),
-    }
+    windows = []
+    for window_seconds in VOLUME_WINDOWS_SECONDS:
+        bucket = facets.get(f"w_{window_seconds}") or []
+        summary = bucket[0] if bucket else {"total_volume_usd": 0, "count": 0}
+        windows.append(
+            {
+                "window_minutes": window_seconds // 60,
+                "window_seconds": window_seconds,
+                "total_volume_usd": round(float(summary["total_volume_usd"]), 2),
+                "count": int(summary["count"]),
+            }
+        )
 
-    save_volume_snapshot(volume)
-    emit_volume(volume)
+    payload = {"symbol": symbol, "windows": windows}
 
-    return volume
+    save_volume_snapshot(payload)
+    emit_volume(payload)
+
+    return payload
 
 
 @router.get("/price")

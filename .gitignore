@@ -2,3 +2,4 @@ api/__pycache__
 .env
 .venv
 dashboard_api/node_modules
+node_modules

@@ -1,24 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { io } from "socket.io-client";
 import {
-  Activity,
   AlertTriangle,
   BarChart3,
   Database,
   SlidersHorizontal,
   Zap,
 } from "lucide-react";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:8000";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -31,7 +21,13 @@ const quantityFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 8,
 });
 
-const defaultPriceSeries = [];
+const initialState = {
+  connected: false,
+  trades: [],
+  price: null,
+  volume: null,
+  alerts: [],
+};
 
 function formatTradeTime(value) {
   if (!value) return "--:--:--";
@@ -45,7 +41,7 @@ function formatTradeTime(value) {
   });
 }
 
-function mapApiTrade(trade, index) {
+function formatTrade(trade, index) {
   const quantity = Number(trade.quantity || 0);
   const price = Number(trade.price || 0);
   const amount = Number(trade.amount || price * quantity);
@@ -53,107 +49,21 @@ function mapApiTrade(trade, index) {
   return {
     id: String(trade.trade_id || trade._id || index),
     price: currencyFormatter.format(price),
-    market: `Binance - ${trade.symbol || "BTCUSDT"}`,
     amount: `${quantityFormatter.format(quantity)} BTC`,
     time: formatTradeTime(trade.trade_time_iso || trade.trade_time),
-    tone: trade.is_market_maker ? "down" : "up",
+    tone: trade.is_market_maker ? "negative" : "positive",
     anomaly: amount > 100000,
+    symbol: trade.symbol || "BTCUSDT",
   };
 }
 
-function KpiCard({ label, value, meta, tone }) {
-  return (
-    <article className="card kpi-card">
-      <span>{label}</span>
-      <strong className={tone}>{value}</strong>
-      <small className={tone}>{meta}</small>
-    </article>
-  );
-}
-
-function PriceChart({ series }) {
-  return (
-    <article className="card chart-panel">
-      <div className="panel-title">
-        <h2>
-          <Activity size={18} /> Prix BTC/USDT — 1 point toutes les 5 secondes
-        </h2>
-        <strong>Moy. mobile</strong>
-      </div>
-
-      <div className="chart-wrap">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={series}
-            margin={{ top: 20, right: 30, left: 10, bottom: 25 }}
-          >
-            <CartesianGrid stroke="rgba(255,255,255,0.08)" />
-
-            <XAxis
-              dataKey="time"
-              tick={{ fill: "#9ca3af", fontSize: 12 }}
-              axisLine={{ stroke: "#374151" }}
-              tickLine={{ stroke: "#374151" }}
-            />
-
-            <YAxis
-              domain={["auto", "auto"]}
-              tick={{ fill: "#9ca3af", fontSize: 12 }}
-              axisLine={{ stroke: "#374151" }}
-              tickLine={{ stroke: "#374151" }}
-              tickFormatter={(value) =>
-                `$${Number(value).toLocaleString("en-US")}`
-              }
-            />
-
-            <Tooltip
-              formatter={(value, name) => [
-                `$${Number(value).toLocaleString("en-US")}`,
-                name === "price" ? "Prix BTC" : "Moyenne mobile",
-              ]}
-              labelFormatter={(label) => `Heure : ${label}`}
-              contentStyle={{
-                background: "#111721",
-                border: "1px solid #2b3444",
-                borderRadius: "8px",
-                color: "#eef3ff",
-              }}
-            />
-
-            <Line
-              type="monotone"
-              dataKey="average"
-              stroke="#e6bd47"
-              strokeDasharray="5 6"
-              strokeWidth={2}
-              dot={{ r: 3 }}
-            />
-
-            <Line
-              type="monotone"
-              dataKey="price"
-              stroke="#6596ff"
-              strokeWidth={3}
-              dot={{ r: 4 }}
-              activeDot={{ r: 6 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </article>
-  );
-}
-
-function RecentTrades({ trades, status }) {
+function RecentTrades({ trades }) {
   return (
     <aside className="card">
       <div className="panel-title">
         <h2>
           <Zap size={18} /> Trades récents
         </h2>
-        <span className={status === "API live" ? "positive" : ""}>
-          {status}
-        </span>
       </div>
 
       <div className="trade-list">
@@ -164,11 +74,11 @@ function RecentTrades({ trades, status }) {
             className={`trade-row ${trade.anomaly ? "anomaly" : ""}`}
             key={trade.id}
           >
-            <strong className={trade.tone === "up" ? "positive" : "negative"}>
+            <strong className={trade.tone}>
               {trade.price}
             </strong>
             <strong>{trade.amount}</strong>
-            <span>{trade.market}</span>
+            <span>Binance - {trade.symbol}</span>
             <small>{trade.time}</small>
           </div>
         ))}
@@ -190,10 +100,10 @@ function AlertsPanel({ alerts }) {
         {alerts.length === 0 && <p>Aucune alerte détectée.</p>}
 
         {alerts.map((alert, index) => (
-          <div className="alert-row" key={index}>
+          <div className="alert-row" key={`${alert.type || "alert"}-${index}`}>
             <i className={`dot ${alert.severity || "info"}`}></i>
             <strong>{alert.type || "Alerte"}</strong>
-            <span>{alert.detail}</span>
+            <span>{alert.detail || "Aucun détail"}</span>
           </div>
         ))}
       </div>
@@ -201,21 +111,14 @@ function AlertsPanel({ alerts }) {
   );
 }
 
+function formatWindowLabel(windowSeconds) {
+  if (windowSeconds < 60) return `${windowSeconds}s`;
+  if (windowSeconds < 3600) return `${windowSeconds / 60} min`;
+  return `${windowSeconds / 3600} h`;
+}
+
 function VolumePanel({ volume }) {
-  const one = volume?.oneMinute;
-  const five = volume?.fiveMinutes;
-  const fifteen = volume?.fifteenMinutes;
-
-  const maxVolume = Math.max(
-    Number(one?.total_volume_usd || 0),
-    Number(five?.total_volume_usd || 0),
-    Number(fifteen?.total_volume_usd || 0),
-    1
-  );
-
-  const getWidth = (value) => {
-    return `${Math.max((Number(value || 0) / maxVolume) * 100, 8)}%`;
-  };
+  const windows = volume?.windows || [];
 
   return (
     <article className="card">
@@ -225,59 +128,32 @@ function VolumePanel({ volume }) {
         </h2>
       </div>
 
+      {windows.length === 0 && <p>Aucune donnée de volume pour le moment.</p>}
+
       <div className="volume-list">
-        <div className="volume-row">
-          <span>1 min</span>
-          <b
-            className="btc"
-            style={{ "--width": getWidth(one?.total_volume_usd) }}
-          ></b>
-          <strong>
-            {currencyFormatter.format(one?.total_volume_usd || 0)}
-          </strong>
-        </div>
-
-        <div className="volume-row">
-          <span>5 min</span>
-          <b
-            className="btc"
-            style={{ "--width": getWidth(five?.total_volume_usd) }}
-          ></b>
-          <strong>
-            {currencyFormatter.format(five?.total_volume_usd || 0)}
-          </strong>
-        </div>
-
-        <div className="volume-row">
-          <span>15 min</span>
-          <b
-            className="btc"
-            style={{ "--width": getWidth(fifteen?.total_volume_usd) }}
-          ></b>
-          <strong>
-            {currencyFormatter.format(fifteen?.total_volume_usd || 0)}
-          </strong>
-        </div>
-
-        <div className="volume-row">
-          <span>Trades 5 min</span>
-          <b className="eth" style={{ "--width": "55%" }}></b>
-          <strong>{five?.count || 0}</strong>
-        </div>
+        {windows.map((window) => (
+          <div className="volume-row" key={window.window_seconds}>
+            <span>{formatWindowLabel(window.window_seconds)}</span>
+            <b className="btc" style={{ "--width": "100%" }}></b>
+            <strong>
+              {currencyFormatter.format(Number(window.total_volume_usd || 0))}
+            </strong>
+          </div>
+        ))}
       </div>
     </article>
   );
 }
 
-function PipelineHealth({ status }) {
+function PipelineHealth({ connected }) {
   const rows = [
     [
-      "API FastAPI",
-      status === "API live" ? "connectée" : "indisponible",
-      status === "API live" ? "positive" : "warning",
+      "Socket.IO",
+      connected ? "connecté" : "déconnecté",
+      connected ? "positive" : "warning",
     ],
     ["Base de données", "MongoDB", "positive"],
-    ["WebSocket", "Binance", "positive"],
+    ["Pipeline", "Binance → Kafka → MongoDB", "positive"],
     ["Dashboard", "React actif", "positive"],
   ];
 
@@ -302,124 +178,81 @@ function PipelineHealth({ status }) {
 }
 
 function App() {
-  const [tradeFeed, setTradeFeed] = useState([]);
-  const [tradeStatus, setTradeStatus] = useState("chargement API");
-
-  const [currentPrice, setCurrentPrice] = useState("$0.00");
-  const [priceMeta, setPriceMeta] = useState("0.00% vs 1h");
-  const [priceTone, setPriceTone] = useState("positive");
-
-  const [volume, setVolume] = useState(null);
-  const [alerts, setAlerts] = useState([]);
-  const [priceSeries, setPriceSeries] = useState(defaultPriceSeries);
-
-  async function refreshDashboard() {
-    try {
-      const [tradesRes, priceRes, volume1Res, volume5Res, volume15Res, alertsRes] =
-        await Promise.allSettled([
-          fetch(`${API_BASE_URL}/api/recent_trades?symbol=BTCUSDT&limit=6`),
-          fetch(
-            `${API_BASE_URL}/api/price?symbol=BTCUSDT&change_window_seconds=3600`
-          ),
-          fetch(`${API_BASE_URL}/api/volume?symbol=BTCUSDT&window_seconds=60`),
-          fetch(`${API_BASE_URL}/api/volume?symbol=BTCUSDT&window_seconds=300`),
-          fetch(`${API_BASE_URL}/api/volume?symbol=BTCUSDT&window_seconds=900`),
-          fetch(`${API_BASE_URL}/api/alerts?symbol=BTCUSDT&window_seconds=600`),
-        ]);
-
-      if (tradesRes.status === "fulfilled" && tradesRes.value.ok) {
-        const data = await tradesRes.value.json();
-        const trades = (data.recent_trades || []).map(mapApiTrade);
-        setTradeFeed(trades);
-        setTradeStatus("API live");
-      } else {
-        setTradeStatus("API indisponible");
-      }
-
-      if (priceRes.status === "fulfilled" && priceRes.value.ok) {
-        const data = await priceRes.value.json();
-
-        const price = Number(data.current_price || 0);
-        const change = Number(data.change_percent || 0);
-
-        setCurrentPrice(currencyFormatter.format(price));
-        setPriceMeta(`${change >= 0 ? "+" : ""}${change.toFixed(2)}% vs 1h`);
-        setPriceTone(change >= 0 ? "positive" : "negative");
-
-        setPriceSeries((oldSeries) => {
-          const now = new Date().toLocaleTimeString("fr-FR", {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          });
-
-          const previousPoints = oldSeries.slice(-19);
-          const average =
-            [...previousPoints, { price }]
-              .slice(-5)
-              .reduce((sum, point) => sum + Number(point.price || 0), 0) /
-            Math.min([...previousPoints, { price }].slice(-5).length, 5);
-
-          return [
-            ...previousPoints,
-            {
-              time: now,
-              price,
-              average: Number(average.toFixed(2)),
-            },
-          ];
-        });
-      }
-
-      if (
-        volume1Res.status === "fulfilled" &&
-        volume1Res.value.ok &&
-        volume5Res.status === "fulfilled" &&
-        volume5Res.value.ok &&
-        volume15Res.status === "fulfilled" &&
-        volume15Res.value.ok
-      ) {
-        const [vol1m, vol5m, vol15m] = await Promise.all([
-          volume1Res.value.json(),
-          volume5Res.value.json(),
-          volume15Res.value.json(),
-        ]);
-
-        setVolume({
-          oneMinute: vol1m,
-          fiveMinutes: vol5m,
-          fifteenMinutes: vol15m,
-        });
-      }
-
-      if (alertsRes.status === "fulfilled" && alertsRes.value.ok) {
-        const data = await alertsRes.value.json();
-        setAlerts(data.alerts || []);
-      }
-    } catch (error) {
-      console.error(error);
-      setTradeStatus("API indisponible");
-    }
-  }
+  const [dashboard, setDashboard] = useState(initialState);
 
   useEffect(() => {
-    refreshDashboard();
+    const socket = io(SOCKET_URL, {
+      reconnection: true,
+    });
 
-    const interval = setInterval(refreshDashboard, 5000);
+    socket.on("connect_error", (error) => {
+      console.error("Socket connect_error:", error.message);
+    });
 
-    return () => clearInterval(interval);
+    socket.on("server_ready", (data) => {
+      console.log(data);
+    });
+
+    socket.on("connect", () => {
+      setDashboard((state) => ({ ...state, connected: true }));
+    });
+
+    socket.on("disconnect", () => {
+      setDashboard((state) => ({ ...state, connected: false }));
+    });
+
+    socket.on("recent_trades", (data) => {
+      const trades = (data?.recent_trades || []).map(formatTrade);
+      setDashboard((state) => ({ ...state, trades }));
+    });
+
+    socket.on("price", (data) => {
+      setDashboard((state) => ({ ...state, price: data }));
+    });
+
+    socket.on("volume", (data) => {
+      setDashboard((state) => ({ ...state, volume: data }));
+    });
+
+    socket.on("alerts", (data) => {
+      setDashboard((state) => ({ ...state, alerts: data?.alerts || [] }));
+    });
+
+    return () => socket.disconnect();
   }, []);
 
-  const volumeValue = volume?.fiveMinutes
-    ? currencyFormatter.format(volume.fiveMinutes.total_volume_usd || 0)
-    : "$0.00";
+  const currentPrice = useMemo(() => {
+    const price = Number(dashboard.price?.current_price || 0);
+    return currencyFormatter.format(price);
+  }, [dashboard.price]);
 
-  const tradesPerSecond = volume?.fiveMinutes
-    ? (
-        Number(volume.fiveMinutes.count || 0) /
-        Number(volume.fiveMinutes.window_seconds || 300)
-      ).toFixed(1)
-    : "0.0";
+  const priceMeta = useMemo(() => {
+    const change = Number(dashboard.price?.change_percent || 0);
+    return `${change >= 0 ? "+" : ""}${change.toFixed(2)}% vs ${
+      dashboard.price?.window_minutes || 60
+    } min`;
+  }, [dashboard.price]);
+
+  const priceTone = Number(dashboard.price?.change_percent || 0) >= 0
+    ? "positive"
+    : "negative";
+
+  const headlineWindow = useMemo(() => {
+    const windows = dashboard.volume?.windows || [];
+    return (
+      windows.find((window) => window.window_seconds === 300) || windows[0]
+    );
+  }, [dashboard.volume]);
+
+  const volumeValue = useMemo(() => {
+    return currencyFormatter.format(Number(headlineWindow?.total_volume_usd || 0));
+  }, [headlineWindow]);
+
+  const tradesPerSecond = useMemo(() => {
+    const count = Number(headlineWindow?.count || 0);
+    const seconds = Number(headlineWindow?.window_seconds || 1);
+    return (count / seconds).toFixed(1);
+  }, [headlineWindow]);
 
   return (
     <main className="dashboard">
@@ -431,9 +264,8 @@ function App() {
 
         <div className="sources">
           <span className="source binance">Binance</span>
-          <span className="source coinbase">Coinbase</span>
           <span className="live-dot"></span>
-          <strong>LIVE</strong>
+          <strong>{dashboard.connected ? "LIVE" : "OFFLINE"}</strong>
         </div>
       </header>
 
@@ -446,57 +278,57 @@ function App() {
         </div>
         <i></i>
         <div>
-          Volume 5 min <strong>{volumeValue}</strong>
+          Volume{" "}
+          <strong>
+            {volumeValue}
+          </strong>
         </div>
         <i></i>
         <div>
-          Alertes <strong className="warning">{alerts.length}</strong>
+          Alertes{" "}
+          <strong className="warning">{dashboard.alerts.length}</strong>
         </div>
       </section>
 
       <section className="kpi-grid">
-        <KpiCard
-          label="BTC/USDT — Prix actuel"
-          value={currentPrice}
-          meta={priceMeta}
-          tone={priceTone}
-        />
+        <article className="card kpi-card">
+          <span>BTC/USDT — Prix actuel</span>
+          <strong className={priceTone}>{currentPrice}</strong>
+          <small className={priceTone}>{priceMeta}</small>
+        </article>
 
-        <KpiCard
-          label="Vol glissant 5 min"
-          value={volumeValue}
-          meta={`${volume?.fiveMinutes?.count || 0} trades`}
-        />
+        <article className="card kpi-card">
+          <span>Volume</span>
+          <strong>{volumeValue}</strong>
+          <small>{headlineWindow?.window_seconds || 0}s</small>
+        </article>
 
-        <KpiCard
-          label="Trades / seconde"
-          value={tradesPerSecond}
-          meta="Binance"
-          tone="positive"
-        />
+        <article className="card kpi-card">
+          <span>Trades / seconde</span>
+          <strong className="positive">{tradesPerSecond}</strong>
+          <small>Binance</small>
+        </article>
 
-        <KpiCard
-          label="Anomalies détectées"
-          value={alerts.length}
-          meta="dernières 10 min"
-          tone="warning"
-        />
+        <article className="card kpi-card">
+          <span>Anomalies détectées</span>
+          <strong className="warning">{dashboard.alerts.length}</strong>
+          <small>temps réel</small>
+        </article>
       </section>
 
       <section className="main-grid">
-        <PriceChart series={priceSeries} />
-        <RecentTrades trades={tradeFeed} status={tradeStatus} />
+        <RecentTrades trades={dashboard.trades} />
+        <AlertsPanel alerts={dashboard.alerts} />
       </section>
 
       <section className="bottom-grid">
-        <AlertsPanel alerts={alerts} />
-        <VolumePanel volume={volume} />
-        <PipelineHealth status={tradeStatus} />
+        <VolumePanel volume={dashboard.volume} />
+        <PipelineHealth connected={dashboard.connected} />
       </section>
 
       <footer>
         Kafka topic: <strong>crypto.trades.raw</strong> — MongoDB — FastAPI —
-        React — Recharts
+        React
       </footer>
     </main>
   );
