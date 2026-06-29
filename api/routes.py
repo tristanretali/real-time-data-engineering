@@ -103,7 +103,7 @@ def volume(
 @router.get("/price")
 def price(
     symbol: str = Query("BTCUSDT"),
-    change_window_seconds: int = Query(3600, ge=60, le=86400),  # défaut 1h
+    change_window_seconds: int = Query(3600, ge=60, le=86400),
 ):
 
     current_trade = trades_collection.find_one(
