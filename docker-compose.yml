@@ -233,7 +233,13 @@ services:
 
     command: python -m app.kafka_worker
 
-
+  api:
+    build: .
+    volumes:
+      - .:/app
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8080 --reload
+    ports:
+      - "8080:8080"
 
   orchestration-monitor:
     build: .
