@@ -10,6 +10,8 @@ from .socketio_event import (
     emit_price,
     save_alerts_snapshot,
     emit_alerts,
+    save_trade_rate_snapshot,
+    emit_trade_rate,
 )
 from .database import trades_collection
 
@@ -55,6 +57,31 @@ def recent_trades(
     emit_recent_trades(trades)
 
     return {"recent_trades": trades}
+
+
+@router.get("/trade_rate")
+def trade_rate(
+    symbol: str = Query("BTCUSDT"),
+    window_seconds: int = Query(10, ge=1, le=60),
+):
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    since_ms = now_ms - (window_seconds * 1000)
+
+    count = trades_collection.count_documents(
+        {"symbol": symbol, "trade_time": {"$gte": since_ms}}
+    )
+
+    payload = {
+        "symbol": symbol,
+        "window_seconds": window_seconds,
+        "count": count,
+        "trades_per_second": round(count / window_seconds, 2),
+    }
+
+    save_trade_rate_snapshot(payload)
+    emit_trade_rate(payload)
+
+    return payload
 
 
 @router.get("/volume")

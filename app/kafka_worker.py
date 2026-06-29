@@ -42,7 +42,7 @@ def create_collection():
     client.admin.command("ping")
     collection = client[MONGODB_DATABASE][MONGODB_COLLECTION]
     collection.create_index("trade_id", unique=True)
-    collection.create_index("event_time")
+    collection.create_index([("symbol", 1), ("trade_time", -1)])
     return client, collection
 
 

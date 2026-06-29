@@ -34,6 +34,7 @@ const initialState = {
   trades: [],
   price: null,
   volume: null,
+  tradeRate: null,
   alerts: [],
   alertsWindowMinutes: 0,
 };
@@ -259,6 +260,10 @@ function App() {
       setDashboard((state) => ({ ...state, volume: data }));
     });
 
+    socket.on("trade_rate", (data) => {
+      setDashboard((state) => ({ ...state, tradeRate: data }));
+    });
+
     socket.on("alerts", (data) => {
       setDashboard((state) => ({
         ...state,
@@ -297,11 +302,7 @@ function App() {
     return currencyFormatter.format(Number(headlineWindow?.total_volume_usd || 0));
   }, [headlineWindow]);
 
-  const tradesPerSecond = useMemo(() => {
-    const count = Number(headlineWindow?.count || 0);
-    const seconds = Number(headlineWindow?.window_seconds || 1);
-    return (count / seconds).toFixed(1);
-  }, [headlineWindow]);
+  const tradesPerSecond = Math.round(Number(dashboard.tradeRate?.trades_per_second || 0));
 
   return (
     <main className="dashboard">
@@ -326,15 +327,13 @@ function App() {
         </article>
 
         <article className="card kpi-card">
-          <span>Volume</span>
+          <span>Volume sur {headlineWindow?.window_minutes || 0} min</span>
           <strong>{volumeValue}</strong>
-          <small>Volume sur {headlineWindow?.window_minutes || 0} min</small>
         </article>
 
         <article className="card kpi-card">
           <span>Trades / seconde</span>
           <strong className="positive">{tradesPerSecond}</strong>
-          <small>Binance</small>
         </article>
 
         <article className="card kpi-card">
