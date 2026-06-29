@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 import {
+  Activity,
   AlertTriangle,
   BarChart3,
   Database,
@@ -21,12 +22,20 @@ const quantityFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 8,
 });
 
+const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  notation: "compact",
+  maximumFractionDigits: 2,
+});
+
 const initialState = {
   connected: false,
   trades: [],
   price: null,
   volume: null,
   alerts: [],
+  alertsWindowMinutes: 0,
 };
 
 function formatTradeTime(value) {
@@ -83,9 +92,29 @@ function RecentTrades({ trades }) {
           </div>
         ))}
       </div>
+
+      <div className="legend">
+        <span>
+          <i className="dot danger"></i>Market maker (déjà dans le carnet)
+        </span>
+        <span>
+          <i className="dot success"></i>Taker (exécuté immédiatement)
+        </span>
+      </div>
     </aside>
   );
 }
+
+const ALERT_LABELS = {
+  volume_anormal: "Volume anormal détecté",
+  rapid_price_change: "Variation de prix rapide",
+};
+
+const SEVERITY_DOT_CLASS = {
+  high: "danger",
+  medium: "warning",
+  low: "success",
+};
 
 function AlertsPanel({ alerts }) {
   return (
@@ -101,8 +130,8 @@ function AlertsPanel({ alerts }) {
 
         {alerts.map((alert, index) => (
           <div className="alert-row" key={`${alert.type || "alert"}-${index}`}>
-            <i className={`dot ${alert.severity || "info"}`}></i>
-            <strong>{alert.type || "Alerte"}</strong>
+            <i className={`dot ${SEVERITY_DOT_CLASS[alert.severity] || "info"}`}></i>
+            <strong>{ALERT_LABELS[alert.type] || alert.type || "Alerte"}</strong>
             <span>{alert.detail || "Aucun détail"}</span>
           </div>
         ))}
@@ -136,10 +165,26 @@ function VolumePanel({ volume }) {
             <span>{formatWindowLabel(window.window_seconds)}</span>
             <b className="btc" style={{ "--width": "100%" }}></b>
             <strong>
-              {currencyFormatter.format(Number(window.total_volume_usd || 0))}
+              {compactCurrencyFormatter.format(Number(window.total_volume_usd || 0))}
             </strong>
           </div>
         ))}
+      </div>
+    </article>
+  );
+}
+
+function PriceChartPlaceholder() {
+  return (
+    <article className="card chart-panel">
+      <div className="panel-title">
+        <h2>
+          <Activity size={18} /> Prix BTC/USDT — Fenêtre glissante
+        </h2>
+      </div>
+
+      <div className="chart-wrap chart-placeholder">
+        <p>Courbe à venir</p>
       </div>
     </article>
   );
@@ -215,7 +260,11 @@ function App() {
     });
 
     socket.on("alerts", (data) => {
-      setDashboard((state) => ({ ...state, alerts: data?.alerts || [] }));
+      setDashboard((state) => ({
+        ...state,
+        alerts: data?.alerts || [],
+        alertsWindowMinutes: data?.window_minutes || 0,
+      }));
     });
 
     return () => socket.disconnect();
@@ -269,27 +318,6 @@ function App() {
         </div>
       </header>
 
-      <section className="ticker">
-        <div>
-          BTC/USDT{" "}
-          <strong className={priceTone}>
-            {currentPrice} {priceMeta}
-          </strong>
-        </div>
-        <i></i>
-        <div>
-          Volume{" "}
-          <strong>
-            {volumeValue}
-          </strong>
-        </div>
-        <i></i>
-        <div>
-          Alertes{" "}
-          <strong className="warning">{dashboard.alerts.length}</strong>
-        </div>
-      </section>
-
       <section className="kpi-grid">
         <article className="card kpi-card">
           <span>BTC/USDT — Prix actuel</span>
@@ -300,7 +328,7 @@ function App() {
         <article className="card kpi-card">
           <span>Volume</span>
           <strong>{volumeValue}</strong>
-          <small>{headlineWindow?.window_seconds || 0}s</small>
+          <small>Volume sur {headlineWindow?.window_minutes || 0} min</small>
         </article>
 
         <article className="card kpi-card">
@@ -312,16 +340,17 @@ function App() {
         <article className="card kpi-card">
           <span>Anomalies détectées</span>
           <strong className="warning">{dashboard.alerts.length}</strong>
-          <small>temps réel</small>
+          <small>dernières {dashboard.alertsWindowMinutes} min</small>
         </article>
       </section>
 
       <section className="main-grid">
+        <PriceChartPlaceholder />
         <RecentTrades trades={dashboard.trades} />
-        <AlertsPanel alerts={dashboard.alerts} />
       </section>
 
       <section className="bottom-grid">
+        <AlertsPanel alerts={dashboard.alerts} />
         <VolumePanel volume={dashboard.volume} />
         <PipelineHealth connected={dashboard.connected} />
       </section>

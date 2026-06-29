@@ -34,11 +34,9 @@ def save_price_snapshot(price: dict):
     return price
 
 
-def save_alerts_snapshot(alerts: list):
-    redis_client.setex(
-        "snapshot:alerts", SNAPSHOT_TTL_SECONDS, json.dumps({"alerts": alerts})
-    )
-    return {"alerts": alerts}
+def save_alerts_snapshot(alerts: dict):
+    redis_client.setex("snapshot:alerts", SNAPSHOT_TTL_SECONDS, json.dumps(alerts))
+    return alerts
 
 
 def get_recent_trades_snapshot():
@@ -95,6 +93,6 @@ def emit_price(price: dict):
     return price
 
 
-def emit_alerts(alerts: list):
-    socketio_manager.emit("alerts", {"alerts": alerts})
-    return {"alerts": alerts}
+def emit_alerts(alerts: dict):
+    socketio_manager.emit("alerts", alerts)
+    return alerts

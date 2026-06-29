@@ -213,8 +213,8 @@ def alerts(
             "alerts": [],
             "count": 0,
         }
-        save_alerts_snapshot([])
-        emit_alerts([])
+        save_alerts_snapshot(payload)
+        emit_alerts(payload)
         return payload
 
     volumes = []
@@ -266,7 +266,7 @@ def alerts(
             {
                 "type": "rapid_price_change",
                 "severity": "medium",
-                "detail": f"{direction}{round(price_change, 2)}$ ({round(price_change_percent, 2)}%)",
+                "detail": f"{direction}{abs(round(price_change, 2))}$ ({round(price_change_percent, 2)}%)",
             }
         )
 
@@ -277,7 +277,7 @@ def alerts(
         "alerts": alerts_list,
     }
 
-    save_alerts_snapshot(alerts_list)
-    emit_alerts(alerts_list)
+    save_alerts_snapshot(payload)
+    emit_alerts(payload)
 
     return payload
