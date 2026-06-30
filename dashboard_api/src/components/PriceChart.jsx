@@ -11,10 +11,28 @@ import {
 
 import { formatMinuteLabel } from "../utils/format";
 
+const MOVING_AVERAGE_WINDOW = 3;
+
+function average(values) {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function withMovingAverage(points) {
+  return points.map((point, index) => {
+    const windowStart = Math.max(0, index - MOVING_AVERAGE_WINDOW + 1);
+    const window = points.slice(windowStart, index + 1);
+    return {
+      ...point,
+      average: Math.round(average(window.map((p) => p.price)) * 100) / 100,
+    };
+  });
+}
+
 export function PriceChart({ points }) {
-  const data = points.map((point) => ({
+  const data = withMovingAverage(points).map((point) => ({
     time: formatMinuteLabel(point.time),
     price: point.price,
+    average: point.average,
   }));
 
   return (
@@ -51,9 +69,9 @@ export function PriceChart({ points }) {
               />
 
               <Tooltip
-                formatter={(value) => [
+                formatter={(value, name) => [
                   `$${Number(value).toLocaleString("en-US")}`,
-                  "Prix BTC",
+                  name === "price" ? "Prix BTC" : "Moy. mobile",
                 ]}
                 labelFormatter={(label) => `Heure : ${label}`}
                 contentStyle={{
@@ -62,6 +80,15 @@ export function PriceChart({ points }) {
                   borderRadius: "8px",
                   color: "#eef3ff",
                 }}
+              />
+
+              <Line
+                type="monotone"
+                dataKey="average"
+                stroke="#e6bd47"
+                strokeDasharray="5 6"
+                strokeWidth={2}
+                dot={{ r: 3 }}
               />
 
               <Line
@@ -76,6 +103,17 @@ export function PriceChart({ points }) {
           </ResponsiveContainer>
         )}
       </div>
+
+      {data.length > 0 && (
+        <div className="legend">
+          <span>
+            <i className="line blue-line"></i>Prix BTC
+          </span>
+          <span>
+            <i className="line gold-line"></i>Moy. mobile
+          </span>
+        </div>
+      )}
     </article>
   );
 }
