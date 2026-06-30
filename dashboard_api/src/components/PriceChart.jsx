@@ -89,6 +89,7 @@ export function PriceChart({ points }) {
                 strokeDasharray="5 6"
                 strokeWidth={2}
                 dot={{ r: 3 }}
+                isAnimationActive={false}
               />
 
               <Line
@@ -98,6 +99,7 @@ export function PriceChart({ points }) {
                 strokeWidth={3}
                 dot={{ r: 3 }}
                 activeDot={{ r: 6 }}
+                isAnimationActive={false}
               />
             </LineChart>
           </ResponsiveContainer>
