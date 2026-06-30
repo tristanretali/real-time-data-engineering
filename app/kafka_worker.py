@@ -12,7 +12,6 @@ from api.constants import DEFAULT_SYMBOL
 from api.routes import alerts, price, price_history, recent_trades, trade_rate, volume
 from .health_bus import emit_service_health, redis_client
 
-
 WORKER_LABEL = os.getenv("WORKER_LABEL", "kafka-worker")
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "binance.trades")
@@ -21,19 +20,24 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://mongodb:27017")
 MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "market_data")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "binance_trades")
 
-socketio_message_queue = socketio.RedisManager(
-    os.getenv("SOCKETIO_REDIS_URL", "redis://redis:6379/2"),
-    write_only=True,
-)
-
 METRIC_TRIGGERS = [
     ("recent_trades", recent_trades, 1, {"symbol": DEFAULT_SYMBOL, "limit": 5}),
     ("trade_rate", trade_rate, 1, {"symbol": DEFAULT_SYMBOL, "window_seconds": 60}),
     ("price", price, 5, {"symbol": DEFAULT_SYMBOL, "change_window_seconds": 900}),
     ("volume", volume, 5, {"symbol": DEFAULT_SYMBOL}),
     ("alerts", alerts, 5, {"symbol": DEFAULT_SYMBOL, "window_seconds": 300}),
-    ("price_history", price_history, 60, {"symbol": DEFAULT_SYMBOL, "window_minutes": 15}),
+    (
+        "price_history",
+        price_history,
+        60,
+        {"symbol": DEFAULT_SYMBOL, "window_minutes": 15},
+    ),
 ]
+
+socketio_message_queue = socketio.RedisManager(
+    os.getenv("SOCKETIO_REDIS_URL", "redis://redis:6379/2"),
+    write_only=True,
+)
 
 
 def trigger_metric(label, fn, min_interval_seconds, kwargs):
@@ -158,7 +162,14 @@ def run_worker():
                         )
                         time.sleep(reconnect_delay)
                         break
-        except (NoBrokersAvailable, NodeNotReadyError, KafkaError, PyMongoError, OSError, ValueError) as exc:
+        except (
+            NoBrokersAvailable,
+            NodeNotReadyError,
+            KafkaError,
+            PyMongoError,
+            OSError,
+            ValueError,
+        ) as exc:
             emit_service_health(
                 WORKER_LABEL,
                 "degraded",
