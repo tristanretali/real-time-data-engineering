@@ -8,6 +8,8 @@ from api.socketio_event import (
     get_volume_snapshot,
     get_price_snapshot,
     get_alerts_snapshot,
+    get_trade_rate_snapshot,
+    get_price_history_snapshot,
 )
 
 socketio_message_queue = socketio.AsyncRedisManager(
@@ -45,6 +47,14 @@ async def connect(sid, environ):
     alerts_snapshot = get_alerts_snapshot()
     if alerts_snapshot:
         await sio.emit("alerts", alerts_snapshot, to=sid)
+
+    trade_rate_snapshot = get_trade_rate_snapshot()
+    if trade_rate_snapshot:
+        await sio.emit("trade_rate", trade_rate_snapshot, to=sid)
+
+    price_history_snapshot = get_price_history_snapshot()
+    if price_history_snapshot:
+        await sio.emit("price_history", price_history_snapshot, to=sid)
 
 
 @sio.event

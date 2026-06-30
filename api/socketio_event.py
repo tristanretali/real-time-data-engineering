@@ -54,3 +54,11 @@ def get_price_snapshot():
 
 def get_alerts_snapshot():
     return get_snapshot("alerts")
+
+
+def get_trade_rate_snapshot():
+    return get_snapshot("trade_rate")
+
+
+def get_price_history_snapshot():
+    return get_snapshot("price_history")
