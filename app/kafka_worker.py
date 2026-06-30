@@ -8,7 +8,9 @@ from kafka.errors import KafkaError, NoBrokersAvailable, NodeNotReadyError
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
-from .health_bus import emit_service_health
+from api.constants import DEFAULT_SYMBOL
+from api.routes import alerts, price, price_history, recent_trades, trade_rate, volume
+from .health_bus import emit_service_health, redis_client
 
 
 WORKER_LABEL = os.getenv("WORKER_LABEL", "kafka-worker")
@@ -23,6 +25,33 @@ socketio_message_queue = socketio.RedisManager(
     os.getenv("SOCKETIO_REDIS_URL", "redis://redis:6379/2"),
     write_only=True,
 )
+
+METRIC_TRIGGERS = [
+    ("recent_trades", recent_trades, 1, {"symbol": DEFAULT_SYMBOL, "limit": 5}),
+    ("trade_rate", trade_rate, 1, {"symbol": DEFAULT_SYMBOL, "window_seconds": 60}),
+    ("price", price, 5, {"symbol": DEFAULT_SYMBOL, "change_window_seconds": 900}),
+    ("volume", volume, 5, {"symbol": DEFAULT_SYMBOL}),
+    ("alerts", alerts, 5, {"symbol": DEFAULT_SYMBOL, "window_seconds": 300}),
+    ("price_history", price_history, 60, {"symbol": DEFAULT_SYMBOL, "window_minutes": 15}),
+]
+
+
+def trigger_metric(label, fn, min_interval_seconds, kwargs):
+    lock_acquired = redis_client.set(
+        f"trigger:{label}", "1", nx=True, ex=min_interval_seconds
+    )
+    if not lock_acquired:
+        return
+
+    try:
+        fn(**kwargs)
+    except Exception as exc:
+        print(f"trigger error [{label}]: {exc}")
+
+
+def trigger_metrics_for_trade():
+    for label, fn, min_interval_seconds, kwargs in METRIC_TRIGGERS:
+        trigger_metric(label, fn, min_interval_seconds, kwargs)
 
 
 def create_consumer():
@@ -120,6 +149,7 @@ def run_worker():
                             f"Stored trade {document['trade_id']} in MongoDB",
                             {"symbol": document["symbol"]},
                         )
+                        trigger_metrics_for_trade()
                     except PyMongoError as exc:
                         emit_service_health(
                             WORKER_LABEL,
