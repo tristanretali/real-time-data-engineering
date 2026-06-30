@@ -95,11 +95,6 @@ function App() {
           consumerGroup={dashboard.consumerGroup}
         />
       </section>
-
-      <footer>
-        Kafka topic: <strong>crypto.trades.raw</strong> — MongoDB — FastAPI —
-        React
-      </footer>
     </main>
   );
 }
