@@ -1,6 +1,9 @@
 import { Database } from "lucide-react";
 
-export function PipelineHealth({ connected }) {
+export function PipelineHealth({ connected, consumerGroup }) {
+  const allWorkersActive =
+    consumerGroup.total > 0 && consumerGroup.active === consumerGroup.total;
+
   const rows = [
     [
       "Socket.IO",
@@ -9,6 +12,11 @@ export function PipelineHealth({ connected }) {
     ],
     ["Base de données", "MongoDB", "positive"],
     ["Pipeline", "Binance → Kafka → MongoDB", "positive"],
+    [
+      "Consumer group",
+      `${consumerGroup.active} / ${consumerGroup.total} actifs`,
+      allWorkersActive ? "positive" : "warning",
+    ],
     ["Dashboard", "React actif", "positive"],
   ];
 

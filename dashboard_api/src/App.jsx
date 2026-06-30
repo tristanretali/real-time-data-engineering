@@ -90,7 +90,10 @@ function App() {
       <section className="bottom-grid">
         <AlertsPanel alerts={dashboard.alerts} />
         <VolumePanel volume={dashboard.volume} />
-        <PipelineHealth connected={dashboard.connected} />
+        <PipelineHealth
+          connected={dashboard.connected}
+          consumerGroup={dashboard.consumerGroup}
+        />
       </section>
 
       <footer>

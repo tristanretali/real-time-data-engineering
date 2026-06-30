@@ -13,7 +13,14 @@ const initialState = {
   priceHistory: [],
   alerts: [],
   alertsWindowMinutes: 0,
+  consumerGroup: { active: 0, total: 0 },
 };
+
+function countActiveWorkers(services) {
+  const workers = services.filter((service) => service.service?.startsWith("celery-worker-"));
+  const active = workers.filter((worker) => worker.status === "healthy").length;
+  return { active, total: workers.length };
+}
 
 const EVENT_REDUCERS = {
   recent_trades: (state, data) => ({
@@ -31,6 +38,10 @@ const EVENT_REDUCERS = {
     ...state,
     alerts: data?.alerts || [],
     alertsWindowMinutes: data?.window_minutes || 0,
+  }),
+  orchestration_snapshot: (state, data) => ({
+    ...state,
+    consumerGroup: countActiveWorkers(data?.services || []),
   }),
 };
 
