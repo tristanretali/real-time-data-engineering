@@ -185,6 +185,7 @@ def price(
             "window_minutes": change_window_seconds // 60,
             "timestamp": now_ms(),
         }
+
         return publish("price", price_data)
 
     current_price = float(current_trade.get("price", 0))
@@ -218,6 +219,54 @@ def price(
     return publish("price", price_data)
 
 
+def detect_alerts(trades: list[dict]) -> list[dict]:
+    enriched = [
+        {
+            "price": float(trade.get("price", 0)),
+            "quantity": float(trade.get("quantity", 0)),
+            "amount": float(trade.get("price", 0)) * float(trade.get("quantity", 0)),
+        }
+        for trade in trades
+    ]
+
+    amounts = sorted(trade["amount"] for trade in enriched)
+    median_amount = amounts[len(amounts) // 2]
+    biggest_trade = max(enriched, key=lambda trade: trade["amount"])
+
+    first_price = enriched[-1]["price"]
+    last_price = enriched[0]["price"]
+    price_change = last_price - first_price
+    price_change_percent = (price_change / first_price * 100) if first_price else 0
+
+    alerts_list = []
+
+    if biggest_trade["amount"] >= median_amount * 10 and len(enriched) >= 2:
+        multiplier = (
+            round(biggest_trade["amount"] / median_amount, 0)
+            if median_amount > 0
+            else 0
+        )
+        alerts_list.append(
+            {
+                "type": "volume_anormal",
+                "severity": "high",
+                "detail": f"{round(biggest_trade['quantity'], 8)} BTC sur 1 trade — seuil x{int(multiplier)}",
+            }
+        )
+
+    if abs(price_change_percent) >= 0.1:
+        direction = "+" if price_change >= 0 else "-"
+        alerts_list.append(
+            {
+                "type": "rapid_price_change",
+                "severity": "medium",
+                "detail": f"{direction}{abs(round(price_change, 2))}$ ({round(price_change_percent, 2)}%)",
+            }
+        )
+
+    return alerts_list
+
+
 @router.get("/alerts")
 def alerts(
     symbol: str = Query(DEFAULT_SYMBOL),
@@ -241,75 +290,11 @@ def alerts(
         ).sort("trade_time", -1)
     )
 
-    if not trades:
-        payload = {
-            "symbol": symbol,
-            "window_minutes": window_seconds // 60,
-            "alerts": [],
-            "count": 0,
-        }
-        return publish("alerts", payload)
-
-    volumes = []
-    quantities = []
-    prices = []
-
-    for trade in trades:
-        trade_price = float(trade.get("price", 0))
-        quantity = float(trade.get("quantity", 0))
-        amount = trade_price * quantity
-        volumes.append(amount)
-        quantities.append(quantity)
-        prices.append(trade_price)
-
-    sorted_volumes = sorted(volumes)
-    median_volume = sorted_volumes[len(sorted_volumes) // 2] if sorted_volumes else 0
-
-    max_volume = max(volumes) if volumes else 0
-    max_volume_idx = volumes.index(max_volume) if volumes and max_volume > 0 else -1
-    max_volume_quantity = quantities[max_volume_idx] if max_volume_idx >= 0 else 0
-
-    first_price = prices[-1] if prices else 0
-    last_price = prices[0] if prices else 0
-
-    price_change_percent = (
-        ((last_price - first_price) / first_price) * 100
-        if first_price not in (0, None)
-        else 0
-    )
-
-    alerts_list = []
-
-    if max_volume >= median_volume * 10 and len(trades) >= 2:
-        multiplier = round(max_volume / median_volume, 0) if median_volume > 0 else 0
-        alerts_list.append(
-            {
-                "type": "volume_anormal",
-                "severity": "high",
-                "detail": f"{round(max_volume_quantity, 8)} BTC sur 1 trade — seuil x{int(multiplier)}",
-            }
-        )
-
-    if abs(price_change_percent) >= 0.1:
-        price_change = last_price - first_price
-        direction = "+" if price_change >= 0 else "-"
-        price_change_percent = (
-            ((price_change) / first_price) * 100 if first_price not in (0, None) else 0
-        )
-
-        alerts_list.append(
-            {
-                "type": "rapid_price_change",
-                "severity": "medium",
-                "detail": f"{direction}{abs(round(price_change, 2))}$ ({round(price_change_percent, 2)}%)",
-            }
-        )
-
     payload = {
         "symbol": symbol,
         "window_minutes": window_seconds // 60,
         "count": len(trades),
-        "alerts": alerts_list,
+        "alerts": detect_alerts(trades) if len(trades) >= 2 else [],
     }
 
     return publish("alerts", payload)
