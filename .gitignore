@@ -2,4 +2,5 @@ api/__pycache__
 .env
 .venv
 dashboard_api/node_modules
+dashboard_api/.vite
 node_modules
