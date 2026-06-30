@@ -5,13 +5,21 @@ from typing import Callable
 from fastapi import FastAPI
 
 from .constants import DEFAULT_SYMBOL
-from .routes import alerts, price, price_history, recent_trades, router, trade_rate, volume
+from .routes import (
+    alerts,
+    price,
+    price_history,
+    recent_trades,
+    router,
+    trade_rate,
+    volume,
+)
 
 app = FastAPI(title="API Dashboard Crypto")
 
-FAST_POLL_SECONDS = 1
-SLOW_POLL_SECONDS = 5
-CHART_POLL_SECONDS = 20
+FAST_DATA_PULL = 1
+SLOW_DATA_PULL = 5
+CHART_PULL = 60
 
 FAST_JOBS = [
     ("recent_trades", recent_trades, {"symbol": DEFAULT_SYMBOL, "limit": 5}),
@@ -45,9 +53,15 @@ def run_loop(interval_seconds: float, jobs: list[tuple[str, Callable, dict]]) ->
 
 @app.on_event("startup")
 def start_market_data_pollers():
-    threading.Thread(target=run_loop, args=(FAST_POLL_SECONDS, FAST_JOBS), daemon=True).start()
-    threading.Thread(target=run_loop, args=(SLOW_POLL_SECONDS, SLOW_JOBS), daemon=True).start()
-    threading.Thread(target=run_loop, args=(CHART_POLL_SECONDS, CHART_JOBS), daemon=True).start()
+    threading.Thread(
+        target=run_loop, args=(FAST_DATA_PULL, FAST_JOBS), daemon=True
+    ).start()
+    threading.Thread(
+        target=run_loop, args=(SLOW_DATA_PULL, SLOW_JOBS), daemon=True
+    ).start()
+    threading.Thread(
+        target=run_loop, args=(CHART_PULL, CHART_JOBS), daemon=True
+    ).start()
 
 
 app.include_router(router, prefix="/api")
