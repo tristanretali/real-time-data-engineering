@@ -20,9 +20,12 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://mongodb:27017")
 MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "market_data")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "binance_trades")
 
-METRIC_TRIGGERS = [
-    ("recent_trades", recent_trades, 1, {"symbol": DEFAULT_SYMBOL, "limit": 5}),
-    ("trade_rate", trade_rate, 1, {"symbol": DEFAULT_SYMBOL, "window_seconds": 60}),
+ALWAYS_TRIGGERS = [
+    ("recent_trades", recent_trades, {"symbol": DEFAULT_SYMBOL, "limit": 5}),
+    ("trade_rate", trade_rate, {"symbol": DEFAULT_SYMBOL, "window_seconds": 60}),
+]
+
+THROTTLED_TRIGGERS = [
     ("price", price, 5, {"symbol": DEFAULT_SYMBOL, "change_window_seconds": 900}),
     ("volume", volume, 5, {"symbol": DEFAULT_SYMBOL}),
     ("alerts", alerts, 5, {"symbol": DEFAULT_SYMBOL, "window_seconds": 300}),
@@ -40,6 +43,13 @@ socketio_message_queue = socketio.RedisManager(
 )
 
 
+def safe_call(label, fn, kwargs):
+    try:
+        fn(**kwargs)
+    except Exception as exc:
+        print(f"trigger error [{label}]: {exc}")
+
+
 def trigger_metric(label, fn, min_interval_seconds, kwargs):
     lock_acquired = redis_client.set(
         f"trigger:{label}", "1", nx=True, ex=min_interval_seconds
@@ -47,14 +57,14 @@ def trigger_metric(label, fn, min_interval_seconds, kwargs):
     if not lock_acquired:
         return
 
-    try:
-        fn(**kwargs)
-    except Exception as exc:
-        print(f"trigger error [{label}]: {exc}")
+    safe_call(label, fn, kwargs)
 
 
 def trigger_metrics_for_trade():
-    for label, fn, min_interval_seconds, kwargs in METRIC_TRIGGERS:
+    for label, fn, kwargs in ALWAYS_TRIGGERS:
+        safe_call(label, fn, kwargs)
+
+    for label, fn, min_interval_seconds, kwargs in THROTTLED_TRIGGERS:
         trigger_metric(label, fn, min_interval_seconds, kwargs)
 
 
