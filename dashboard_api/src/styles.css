@@ -1,15 +1,16 @@
 :root {
   color-scheme: dark;
   --bg: #0b0f16;
-  --panel: #141922;
-  --panel-soft: #171d27;
+  --panel: #141a24;
+  --panel-soft: #181f2b;
   --border: #2b3444;
   --muted: #94a0b4;
   --text: #eef3ff;
-  --blue: #6596ff;
-  --green: #6bd36d;
-  --gold: #e6bd47;
-  --red: #f05d55;
+  --blue: #4f8dff;
+  --green: #34d399;
+  --gold: #f2c14e;
+  --red: #ff5c5c;
+  --teal: #2dd4bf;
   --shadow: rgba(0, 0, 0, 0.36);
 }
 
@@ -44,7 +45,7 @@ select {
   width: calc(100vw - 16px);
   height: calc(100vh - 16px);
   margin: 8px;
-  padding: 18px;
+  padding: 14px;
   background: var(--bg);
   box-shadow: 0 18px 50px var(--shadow);
   overflow: hidden;
@@ -92,11 +93,11 @@ h1 {
 h2 {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   color: var(--muted);
-  font-size: 1.02rem;
+  font-size: 0.9rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
 }
 
 .sources {
@@ -127,8 +128,8 @@ h2 {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 16px rgba(107, 211, 109, 0.65);
+  background: var(--teal);
+  box-shadow: 0 0 16px rgba(45, 212, 191, 0.65);
 }
 
 .positive,
@@ -154,8 +155,8 @@ h2 {
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 16px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .card {
@@ -163,30 +164,30 @@ h2 {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 16px;
+  padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: linear-gradient(180deg, var(--panel), var(--panel-soft));
 }
 
 .kpi-card span {
   display: block;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: var(--muted);
-  font-size: 1.04rem;
+  font-size: 0.92rem;
 }
 
 .kpi-card strong {
   display: block;
-  font-size: 2rem;
+  font-size: 1.7rem;
   line-height: 1.1;
 }
 
 .kpi-card small {
   display: block;
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--muted);
-  font-size: 1rem;
+  font-size: 0.88rem;
 }
 
 .kpi-card small.positive {
@@ -202,14 +203,14 @@ h2 {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 2.1fr) minmax(300px, 1fr);
-  gap: 14px;
-  margin-top: 14px;
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .panel-title {
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .panel-title strong {
@@ -301,8 +302,8 @@ h2 {
 .trade-row {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 6px 18px;
-  padding: 11px 0;
+  gap: 4px 18px;
+  padding: 8px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.055);
 }
 
@@ -328,9 +329,9 @@ h2 {
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 14px;
-  max-height: 32vh;
+  gap: 10px;
+  margin-top: 10px;
+  max-height: 30vh;
 }
 
 .bottom-grid .card {
@@ -339,7 +340,7 @@ h2 {
 
 .alert-list {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .alert-row {
@@ -365,7 +366,7 @@ h2 {
 
 .volume-list {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .volume-row {
@@ -400,7 +401,7 @@ h2 {
 
 .health-list {
   display: grid;
-  gap: 15px;
+  gap: 12px;
 }
 
 .health-list div {
